@@ -1,8 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-/// A collector's planned pickup route.
+/// Row in the `routes` table (see supabase/schema.sql).
 class RouteSchedule {
-  RouteSchedule({
+  const RouteSchedule({
     required this.id,
     required this.collectorId,
     required this.collectorName,
@@ -18,15 +16,12 @@ class RouteSchedule {
   final List<String> barangays;
   final String note;
 
-  factory RouteSchedule.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data() ?? {};
-    return RouteSchedule(
-      id: doc.id,
-      collectorId: d['collectorId'] as String? ?? '',
-      collectorName: d['collectorName'] as String? ?? '',
-      startTime: (d['startTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      barangays: List<String>.from(d['barangays'] as List? ?? []),
-      note: d['note'] as String? ?? '',
-    );
-  }
+  factory RouteSchedule.fromMap(Map<String, dynamic> m) => RouteSchedule(
+    id: m['id'] as String,
+    collectorId: m['collector_id'] as String,
+    collectorName: m['collector_name'] as String? ?? '',
+    startTime: DateTime.parse(m['start_time'] as String).toLocal(),
+    barangays: List<String>.from(m['barangays'] as List? ?? const []),
+    note: m['note'] as String? ?? '',
+  );
 }

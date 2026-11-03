@@ -1,46 +1,38 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'firebase_options.dart';
+import 'data/mock/mock_backend.dart';
+import 'data/repositories.dart';
 import 'models/app_user.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/collector/collector_home.dart';
 import 'screens/household/household_home.dart';
-import 'services/auth_service.dart';
-import 'services/notification_service.dart';
-import 'services/post_service.dart';
-import 'services/route_service.dart';
 import 'theme.dart';
 
-final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  final notifications = NotificationService();
-  // Show route alerts that arrive while the app is open.
-  notifications.foregroundMessages.listen((m) {
-    final n = m.notification;
-    if (n == null) return;
-    scaffoldMessengerKey.currentState?.showSnackBar(SnackBar(
-      content: Text('${n.title ?? ''}\n${n.body ?? ''}',
-          style: const TextStyle(fontSize: 17)),
-      duration: const Duration(seconds: 8),
-    ));
-  });
+  // ── Backend wiring ────────────────────────────────────────────────
+  // Static demo data for now. To use Supabase, initialize it here and
+  // replace these four with Supabase implementations of the same interfaces.
+  final store = MockStore();
+  final AuthRepository auth = MockAuthRepository(store);
+  final PostRepository posts = MockPostRepository(store);
+  final RouteRepository routes = MockRouteRepository(store);
+  final PushService push = MockPushService();
+  // ──────────────────────────────────────────────────────────────────
 
-  runApp(MultiProvider(
-    providers: [
-      Provider(create: (_) => AuthService()),
-      Provider(create: (_) => PostService()),
-      Provider(create: (_) => RouteService()),
-      Provider.value(value: notifications),
-    ],
-    child: const BoteBakalApp(),
-  ));
+  runApp(
+    MultiProvider(
+      providers: [
+        Provider.value(value: auth),
+        Provider.value(value: posts),
+        Provider.value(value: routes),
+        Provider.value(value: push),
+      ],
+      child: const BoteBakalApp(),
+    ),
+  );
 }
 
 class BoteBakalApp extends StatelessWidget {
@@ -52,51 +44,43 @@ class BoteBakalApp extends StatelessWidget {
       title: 'Bote-Bakal Tagum',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      scaffoldMessengerKey: scaffoldMessengerKey,
       home: const AuthGate(),
     );
   }
 }
 
 /// Signed out → login. Signed in → household or collector home.
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
   @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final Stream<AppUser?> _user = context
+      .read<AuthRepository>()
+      .currentUser();
+
+  @override
   Widget build(BuildContext context) {
-    final auth = context.read<AuthService>();
-    return StreamBuilder<User?>(
-      stream: auth.authChanges(),
+    return StreamBuilder<AppUser?>(
+      stream: _user,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const _Loading();
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
         final user = snap.data;
         if (user == null) return const LoginScreen();
-        return StreamBuilder<AppUser?>(
-          key: ValueKey(user.uid),
-          stream: auth.profile(user.uid),
-          builder: (context, p) {
-            final profile = p.data;
-            // Profile doc may lag a moment behind account creation.
-            if (profile == null) return const _Loading();
-            return Provider<AppUser>.value(
-              value: profile,
-              child: profile.isCollector
-                  ? const CollectorHome()
-                  : const HouseholdHome(),
-            );
-          },
+        return Provider<AppUser>.value(
+          value: user,
+          child: user.isCollector
+              ? CollectorHome(key: ValueKey(user.id))
+              : HouseholdHome(key: ValueKey(user.id)),
         );
       },
     );
   }
-}
-
-class _Loading extends StatelessWidget {
-  const _Loading();
-
-  @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: CircularProgressIndicator()));
 }

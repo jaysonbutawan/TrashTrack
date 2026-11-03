@@ -1,48 +1,46 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 enum UserRole { household, collector }
 
+/// Row in the `profiles` table (see supabase/schema.sql).
 class AppUser {
-  AppUser({
-    required this.uid,
+  const AppUser({
+    required this.id,
     required this.name,
     required this.phone,
     required this.role,
     this.followedBarangays = const [],
-    this.ratingSum = 0,
-    this.ratingCount = 0,
   });
 
-  final String uid;
+  final String id;
   final String name;
   final String phone;
   final UserRole role;
   final List<String> followedBarangays;
-  final int ratingSum;
-  final int ratingCount;
 
   bool get isCollector => role == UserRole.collector;
-  double? get averageRating => ratingCount == 0 ? null : ratingSum / ratingCount;
 
-  factory AppUser.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data() ?? {};
-    return AppUser(
-      uid: doc.id,
-      name: d['name'] as String? ?? '',
-      phone: d['phone'] as String? ?? '',
-      role: d['role'] == 'collector' ? UserRole.collector : UserRole.household,
-      followedBarangays: List<String>.from(d['followedBarangays'] as List? ?? []),
-      ratingSum: (d['ratingSum'] as num?)?.toInt() ?? 0,
-      ratingCount: (d['ratingCount'] as num?)?.toInt() ?? 0,
-    );
-  }
+  AppUser copyWith({List<String>? followedBarangays}) => AppUser(
+    id: id,
+    name: name,
+    phone: phone,
+    role: role,
+    followedBarangays: followedBarangays ?? this.followedBarangays,
+  );
+
+  factory AppUser.fromMap(Map<String, dynamic> m) => AppUser(
+    id: m['id'] as String,
+    name: m['name'] as String? ?? '',
+    phone: m['phone'] as String? ?? '',
+    role: m['role'] == 'collector' ? UserRole.collector : UserRole.household,
+    followedBarangays: List<String>.from(
+      m['followed_barangays'] as List? ?? const [],
+    ),
+  );
 
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'phone': phone,
-        'role': role.name,
-        'followedBarangays': followedBarangays,
-        'ratingSum': ratingSum,
-        'ratingCount': ratingCount,
-      };
+    'id': id,
+    'name': name,
+    'phone': phone,
+    'role': role.name,
+    'followed_barangays': followedBarangays,
+  };
 }

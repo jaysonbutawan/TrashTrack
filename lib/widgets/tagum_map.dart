@@ -32,8 +32,10 @@ class TagumMap extends StatelessWidget {
         minZoom: 11,
         maxZoom: 18,
         cameraConstraint: CameraConstraint.containCenter(
-          bounds: LatLngBounds(const LatLng(tagumMinLat, tagumMinLng),
-              const LatLng(tagumMaxLat, tagumMaxLng)),
+          bounds: LatLngBounds(
+            const LatLng(tagumMinLat, tagumMinLng),
+            const LatLng(tagumMaxLat, tagumMaxLng),
+          ),
         ),
         onTap: onTap == null ? null : (_, p) => onTap!(p),
       ),
@@ -43,7 +45,9 @@ class TagumMap extends StatelessWidget {
           userAgentPackageName: 'com.hitchmeup.hitchmeup',
         ),
         MarkerLayer(markers: markers),
-        const SimpleAttributionWidget(source: Text('OpenStreetMap contributors')),
+        const SimpleAttributionWidget(
+          source: Text('OpenStreetMap contributors'),
+        ),
       ],
     );
   }
@@ -63,7 +67,7 @@ Future<(LatLng?, String?)> currentLocation() async {
     return (null, 'Location permission was not allowed.');
   }
   final pos = await Geolocator.getCurrentPosition(
-      locationSettings:
-          const LocationSettings(accuracy: LocationAccuracy.high));
+    locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+  );
   return (LatLng(pos.latitude, pos.longitude), null);
 }

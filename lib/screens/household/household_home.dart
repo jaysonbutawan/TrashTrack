@@ -5,10 +5,7 @@ import 'package:provider/provider.dart';
 import '../../models/app_user.dart';
 import '../../models/post.dart';
 import '../../models/route_schedule.dart';
-import '../../services/auth_service.dart';
-import '../../services/notification_service.dart';
-import '../../services/post_service.dart';
-import '../../services/route_service.dart';
+import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 import '../common/post_detail_screen.dart';
 import 'create_post_screen.dart';
@@ -29,20 +26,25 @@ class _HouseholdHomeState extends State<HouseholdHome> {
     super.initState();
     // Make sure this device receives alerts for the barangays the user follows.
     final user = context.read<AppUser>();
-    final n = context.read<NotificationService>();
-    n.requestPermission().then((_) => n.syncBarangayTopics(
-        previous: const [], now: user.followedBarangays));
+    final n = context.read<PushService>();
+    n.requestPermission().then(
+      (_) => n.syncFollowedBarangays(user.followedBarangays),
+    );
   }
 
   Future<void> _logout() async {
-    if (!await confirm(context, 'Log out?', 'You will stop getting route alerts on this phone.',
-        yes: 'Log Out')) {
+    if (!await confirm(
+      context,
+      'Log out?',
+      'You will stop getting route alerts on this phone.',
+      yes: 'Log Out',
+    )) {
       return;
     }
     if (!mounted) return;
-    final user = context.read<AppUser>();
-    await context.read<NotificationService>().unsubscribeAll(user.followedBarangays);
-    if (mounted) await context.read<AuthService>().signOut();
+    final auth = context.read<AuthRepository>();
+    await context.read<PushService>().clear();
+    await auth.signOut();
   }
 
   @override
@@ -53,21 +55,30 @@ class _HouseholdHomeState extends State<HouseholdHome> {
         title: Text(_tab == 0 ? 'My Recyclables' : 'Collector Routes'),
         actions: [
           IconButton(
-              tooltip: 'Log out',
-              iconSize: 30,
-              onPressed: _logout,
-              icon: const Icon(Icons.logout)),
+            tooltip: 'Log out',
+            iconSize: 30,
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+          ),
         ],
       ),
       body: _tab == 0 ? _MyPosts(user: user) : _Routes(user: user),
       floatingActionButton: _tab == 0
           ? FloatingActionButton.extended(
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => Provider.value(
-                      value: user, child: const CreatePostScreen()))),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => Provider.value(
+                    value: user,
+                    child: const CreatePostScreen(),
+                  ),
+                ),
+              ),
               icon: const Icon(Icons.add_a_photo, size: 28),
-              label: const Text('Post Recyclables',
-                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Post Recyclables',
+                style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+              ),
             )
           : null,
       bottomNavigationBar: NavigationBar(
@@ -76,9 +87,13 @@ class _HouseholdHomeState extends State<HouseholdHome> {
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.inventory_2, size: 30), label: 'My Posts'),
+            icon: Icon(Icons.inventory_2, size: 30),
+            label: 'My Posts',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.local_shipping, size: 30), label: 'Routes'),
+            icon: Icon(Icons.local_shipping, size: 30),
+            label: 'Routes',
+          ),
         ],
       ),
     );
@@ -91,18 +106,25 @@ class _MyPosts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final posts = context.read<PostService>();
+    final posts = context.read<PostRepository>();
     return StreamBuilder<List<RecyclablePost>>(
-      stream: posts.householdPosts(user.uid),
+      stream: posts.householdPosts(user.id),
       builder: (context, snap) {
         if (snap.hasError) {
-          return const EmptyMessage(Icons.wifi_off, 'Could not load your posts.');
+          return const EmptyMessage(
+            Icons.wifi_off,
+            'Could not load your posts.',
+          );
         }
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final list = snap.data!;
         if (list.isEmpty) {
-          return const EmptyMessage(Icons.recycling,
-              'No posts yet.\nTap "Post Recyclables" to add one.');
+          return const EmptyMessage(
+            Icons.recycling,
+            'No posts yet.\nTap "Post Recyclables" to add one.',
+          );
         }
         return ListView.builder(
           padding: const EdgeInsets.only(top: 8, bottom: 100),
@@ -111,20 +133,28 @@ class _MyPosts extends StatelessWidget {
             final p = list[i];
             Widget? trailing;
             if (p.status == PostStatus.reserved) {
-              trailing = Text('Reserved by ${p.reservedByName ?? 'a collector'}',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600));
+              trailing = Text(
+                'Reserved by ${p.reservedByName ?? 'a collector'}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              );
             } else if (p.status == PostStatus.collected && p.rating == null) {
               trailing = FilledButton.icon(
                 style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                    backgroundColor: Colors.amber.shade800),
+                  minimumSize: const Size(0, 48),
+                  backgroundColor: Colors.amber.shade800,
+                ),
                 onPressed: () => rateCollectorFlow(context, p),
                 icon: const Icon(Icons.star),
                 label: const Text('Rate Collector'),
               );
             } else if (p.rating != null) {
-              trailing = Text('You rated: ${'★' * p.rating!}',
-                  style: TextStyle(fontSize: 17, color: Colors.amber.shade800));
+              trailing = Text(
+                'You rated: ${'★' * p.rating!}',
+                style: TextStyle(fontSize: 17, color: Colors.amber.shade800),
+              );
             }
             return PostCard(
               post: p,
@@ -144,7 +174,7 @@ class _Routes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final routes = context.read<RouteService>();
+    final routes = context.read<RouteRepository>();
     final followed = user.followedBarangays;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -163,12 +193,18 @@ class _Routes extends StatelessWidget {
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => Provider.value(
-                            value: user, child: const FollowBarangaysScreen()))),
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => Provider.value(
+                      value: user,
+                      child: const FollowBarangaysScreen(),
+                    ),
+                  ),
+                ),
                 icon: const Icon(Icons.notifications_active),
-                label: Text(followed.isEmpty ? 'Follow My Barangay' : 'Change Barangays'),
+                label: Text(
+                  followed.isEmpty ? 'Follow My Barangay' : 'Change Barangays',
+                ),
               ),
             ],
           ),
@@ -179,7 +215,10 @@ class _Routes extends StatelessWidget {
             stream: routes.routesFor(followed),
             builder: (context, snap) {
               if (snap.hasError) {
-                return const EmptyMessage(Icons.wifi_off, 'Could not load routes.');
+                return const EmptyMessage(
+                  Icons.wifi_off,
+                  'Could not load routes.',
+                );
               }
               if (!snap.hasData) {
                 return const Center(child: CircularProgressIndicator());
@@ -187,10 +226,11 @@ class _Routes extends StatelessWidget {
               final list = snap.data!;
               if (list.isEmpty) {
                 return EmptyMessage(
-                    Icons.event_busy,
-                    followed.isEmpty
-                        ? 'No barangay followed yet.'
-                        : 'No collector routes scheduled yet.');
+                  Icons.event_busy,
+                  followed.isEmpty
+                      ? 'No barangay followed yet.'
+                      : 'No collector routes scheduled yet.',
+                );
               }
               return ListView.builder(
                 itemCount: list.length,
@@ -224,28 +264,44 @@ class RouteTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(when,
-                      style: const TextStyle(
-                          fontSize: 19, fontWeight: FontWeight.bold)),
+                  Text(
+                    when,
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text(route.barangays.join(', '),
-                      style: const TextStyle(fontSize: 17)),
+                  Text(
+                    route.barangays.join(', '),
+                    style: const TextStyle(fontSize: 17),
+                  ),
                   if (onDelete == null)
-                    Text('Collector: ${route.collectorName}',
-                        style: const TextStyle(fontSize: 16, color: Colors.black54)),
+                    Text(
+                      'Collector: ${route.collectorName}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.black54,
+                      ),
+                    ),
                   if (route.note.isNotEmpty)
-                    Text(route.note,
-                        style: const TextStyle(
-                            fontSize: 16, fontStyle: FontStyle.italic)),
+                    Text(
+                      route.note,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                 ],
               ),
             ),
             if (onDelete != null)
               IconButton(
-                  iconSize: 30,
-                  tooltip: 'Cancel route',
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline)),
+                iconSize: 30,
+                tooltip: 'Cancel route',
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline),
+              ),
           ],
         ),
       ),

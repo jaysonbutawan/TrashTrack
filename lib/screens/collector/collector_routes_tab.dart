@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/app_user.dart';
 import '../../models/route_schedule.dart';
-import '../../services/route_service.dart';
+import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 import '../household/household_home.dart' show RouteTile;
 import 'schedule_route_screen.dart';
@@ -17,12 +17,13 @@ class CollectorRoutesTab extends StatefulWidget {
 }
 
 class _CollectorRoutesTabState extends State<CollectorRoutesTab> {
-  late final Stream<List<RouteSchedule>> _routes =
-      context.read<RouteService>().collectorRoutes(widget.user.uid);
+  late final Stream<List<RouteSchedule>> _routes = context
+      .read<RouteRepository>()
+      .collectorRoutes(widget.user.id);
 
   @override
   Widget build(BuildContext context) {
-    final service = context.read<RouteService>();
+    final service = context.read<RouteRepository>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -32,8 +33,11 @@ class _CollectorRoutesTabState extends State<CollectorRoutesTab> {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => Provider.value(
-                      value: widget.user, child: const ScheduleRouteScreen())),
+                builder: (_) => Provider.value(
+                  value: widget.user,
+                  child: const ScheduleRouteScreen(),
+                ),
+              ),
             ),
             icon: const Icon(Icons.add_road),
             label: const Text('Schedule a Route'),
@@ -51,8 +55,10 @@ class _CollectorRoutesTabState extends State<CollectorRoutesTab> {
               }
               final list = snap.data!;
               if (list.isEmpty) {
-                return const EmptyMessage(Icons.route,
-                    'No upcoming routes.\nSchedule one so households know you are coming.');
+                return const EmptyMessage(
+                  Icons.route,
+                  'No upcoming routes.\nSchedule one so households know you are coming.',
+                );
               }
               return ListView.builder(
                 itemCount: list.length,
@@ -61,12 +67,17 @@ class _CollectorRoutesTabState extends State<CollectorRoutesTab> {
                   return RouteTile(
                     route: r,
                     onDelete: () async {
-                      if (await confirm(context, 'Cancel this route?',
-                              'It will be removed from the households\' list.') &&
+                      if (await confirm(
+                            context,
+                            'Cancel this route?',
+                            'It will be removed from the households\' list.',
+                          ) &&
                           context.mounted) {
                         await runWithFeedback(
-                            context, () => service.delete(r.id),
-                            successMessage: 'Route cancelled.');
+                          context,
+                          () => service.delete(r.id),
+                          successMessage: 'Route cancelled.',
+                        );
                       }
                     },
                   );

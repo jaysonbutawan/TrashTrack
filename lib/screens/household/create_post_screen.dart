@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import '../../constants.dart';
 import '../../models/app_user.dart';
 import '../../models/post.dart';
-import '../../services/post_service.dart';
+import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 import '../../widgets/tagum_map.dart';
 
@@ -45,8 +45,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<void> _pickPhoto(ImageSource source) async {
-    final x = await ImagePicker()
-        .pickImage(source: source, maxWidth: 1280, imageQuality: 75);
+    final x = await ImagePicker().pickImage(
+      source: source,
+      maxWidth: 1280,
+      imageQuality: 75,
+    );
     if (x != null) setState(() => _photo = File(x.path));
   }
 
@@ -58,9 +61,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       return;
     }
     if (!isInsideTagum(loc)) {
-      showMessage(messenger,
-          'You seem to be outside Tagum City. Tap the map to place the pin.',
-          error: true);
+      showMessage(
+        messenger,
+        'You seem to be outside Tagum City. Tap the map to place the pin.',
+        error: true,
+      );
       return;
     }
     setState(() => _pin = loc);
@@ -69,9 +74,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   void _tapMap(LatLng p) {
     if (!isInsideTagum(p)) {
-      showMessage(ScaffoldMessenger.of(context),
-          'Only places inside Tagum City are allowed.',
-          error: true);
+      showMessage(
+        ScaffoldMessenger.of(context),
+        'Only places inside Tagum City are allowed.',
+        error: true,
+      );
       return;
     }
     setState(() => _pin = p);
@@ -80,7 +87,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   String? _missing() {
     if (_photo == null) return 'Please add a photo.';
     if (_types.isEmpty) return 'Please choose at least one type.';
-    if (_amount.text.trim().isEmpty) return 'Please enter the estimated amount.';
+    if (_amount.text.trim().isEmpty) {
+      return 'Please enter the estimated amount.';
+    }
     if (_label == null) return 'Please choose For Sale or Free.';
     if (_barangay == null) return 'Please choose your barangay.';
     if (_pin == null) return 'Please place the pin on the map.';
@@ -93,19 +102,19 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       showMessage(ScaffoldMessenger.of(context), problem, error: true);
       return;
     }
-    final user = context.read<AppUser>();
-    final posts = context.read<PostService>();
+    final posts = context.read<PostRepository>();
     final ok = await runWithFeedback(
       context,
       () => posts.create(
-        household: user,
-        photo: _photo!,
-        types: RecyclableType.values.where(_types.contains).toList(),
-        amount: _amount.text,
-        location: _pin!,
-        barangay: _barangay!,
-        label: _label!,
-        notes: _notes.text,
+        NewPost(
+          photoPath: _photo!.path,
+          types: RecyclableType.values.where(_types.contains).toList(),
+          amount: _amount.text,
+          location: _pin!,
+          barangay: _barangay!,
+          label: _label!,
+          notes: _notes.text,
+        ),
       ),
       successMessage: 'Posted! Collectors can now see it.',
     );
@@ -113,10 +122,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Widget _section(String title) => Padding(
-        padding: const EdgeInsets.only(top: 22, bottom: 10),
-        child: Text(title,
-            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
-      );
+    padding: const EdgeInsets.only(top: 22, bottom: 10),
+    child: Text(
+      title,
+      style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -132,23 +143,25 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               child: Image.file(_photo!, height: 220, fit: BoxFit.cover),
             ),
           const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: () => _pickPhoto(ImageSource.camera),
-                icon: const Icon(Icons.photo_camera),
-                label: const Text('Camera'),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _pickPhoto(ImageSource.camera),
+                  icon: const Icon(Icons.photo_camera),
+                  label: const Text('Camera'),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => _pickPhoto(ImageSource.gallery),
-                icon: const Icon(Icons.photo_library),
-                label: const Text('Gallery'),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickPhoto(ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('Gallery'),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           _section('2. What type?'),
           Wrap(
             spacing: 8,
@@ -168,7 +181,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             controller: _amount,
             style: const TextStyle(fontSize: 19),
             decoration: const InputDecoration(
-                hintText: 'e.g. 2 sacks, about 5 kg, 1 old ref'),
+              hintText: 'e.g. 2 sacks, about 5 kg, 1 old ref',
+            ),
           ),
           _section('4. For Sale or Free?'),
           SegmentedButton<PostLabel>(
@@ -176,17 +190,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             showSelectedIcon: false,
             style: SegmentedButton.styleFrom(
               minimumSize: const Size.fromHeight(56),
-              textStyle: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+              textStyle: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             segments: const [
               ButtonSegment(
-                  value: PostLabel.forSale,
-                  icon: Icon(Icons.payments),
-                  label: Text('For Sale')),
+                value: PostLabel.forSale,
+                icon: Icon(Icons.payments),
+                label: Text('For Sale'),
+              ),
               ButtonSegment(
-                  value: PostLabel.free,
-                  icon: Icon(Icons.volunteer_activism),
-                  label: Text('Free')),
+                value: PostLabel.free,
+                icon: Icon(Icons.volunteer_activism),
+                label: Text('Free'),
+              ),
             ],
             selected: {?_label},
             onSelectionChanged: (s) =>
@@ -195,8 +214,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           if (_label == PostLabel.forSale)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('The price is agreed with the collector at pickup.',
-                  style: TextStyle(fontSize: 16, color: Colors.black54)),
+              child: Text(
+                'The price is agreed with the collector at pickup.',
+                style: TextStyle(fontSize: 16, color: Colors.black54),
+              ),
             ),
           _section('5. Barangay'),
           DropdownButtonFormField<String>(
@@ -211,8 +232,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             onChanged: (v) => setState(() => _barangay = v),
           ),
           _section('6. Pickup location'),
-          const Text('Tap the map where the collector should go.',
-              style: TextStyle(fontSize: 16, color: Colors.black54)),
+          const Text(
+            'Tap the map where the collector should go.',
+            style: TextStyle(fontSize: 16, color: Colors.black54),
+          ),
           const SizedBox(height: 8),
           SizedBox(
             height: 280,
@@ -228,8 +251,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       width: 50,
                       height: 50,
                       alignment: Alignment.topCenter,
-                      child: const Icon(Icons.location_pin,
-                          size: 50, color: Colors.red),
+                      child: const Icon(
+                        Icons.location_pin,
+                        size: 50,
+                        color: Colors.red,
+                      ),
                     ),
                 ],
               ),
@@ -247,7 +273,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             maxLines: 2,
             style: const TextStyle(fontSize: 18),
             decoration: const InputDecoration(
-                hintText: 'e.g. Blue gate near the sari-sari store'),
+              hintText: 'e.g. Blue gate near the sari-sari store',
+            ),
           ),
           const SizedBox(height: 28),
           FilledButton.icon(

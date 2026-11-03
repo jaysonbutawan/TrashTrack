@@ -19,6 +19,9 @@ void main() {
 
   test('Tagum bounds', () {
     expect(isInsideTagum(tagumCenter), isTrue);
-    expect(isInsideTagum(const LatLng(7.0731, 125.6128)), isFalse); // Davao City
+    expect(
+      isInsideTagum(const LatLng(7.0731, 125.6128)),
+      isFalse,
+    ); // Davao City
   });
 }

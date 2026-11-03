@@ -5,8 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/app_user.dart';
 import '../../models/post.dart';
-import '../../services/auth_service.dart';
-import '../../services/post_service.dart';
+import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 import '../../widgets/tagum_map.dart';
 
@@ -15,18 +14,23 @@ void openPostDetail(BuildContext context, String postId) {
   Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (_) =>
-          Provider.value(value: user, child: PostDetailScreen(postId: postId)),
+      builder: (_) => Provider.value(
+        value: user,
+        child: PostDetailScreen(postId: postId),
+      ),
     ),
   );
 }
 
-Future<void> rateCollectorFlow(BuildContext context, RecyclablePost post) async {
+Future<void> rateCollectorFlow(
+  BuildContext context,
+  RecyclablePost post,
+) async {
   final stars = await askForRating(context, post.reservedByName ?? 'collector');
   if (stars == null || !context.mounted) return;
   await runWithFeedback(
     context,
-    () => context.read<PostService>().rateCollector(post, stars),
+    () => context.read<PostRepository>().rateCollector(post.id, stars),
     successMessage: 'Thank you for rating!',
   );
 }
@@ -34,16 +38,21 @@ Future<void> rateCollectorFlow(BuildContext context, RecyclablePost post) async 
 Future<void> _call(BuildContext context, String phone) async {
   final ok = await launchUrl(Uri(scheme: 'tel', path: phone));
   if (!ok && context.mounted) {
-    showMessage(ScaffoldMessenger.of(context), 'Cannot open the phone app.',
-        error: true);
+    showMessage(
+      ScaffoldMessenger.of(context),
+      'Cannot open the phone app.',
+      error: true,
+    );
   }
 }
 
 Future<void> _directions(RecyclablePost p) => launchUrl(
-      Uri.parse('https://www.google.com/maps/dir/?api=1&destination='
-          '${p.location.latitude},${p.location.longitude}'),
-      mode: LaunchMode.externalApplication,
-    );
+  Uri.parse(
+    'https://www.google.com/maps/dir/?api=1&destination='
+    '${p.location.latitude},${p.location.longitude}',
+  ),
+  mode: LaunchMode.externalApplication,
+);
 
 class PostDetailScreen extends StatelessWidget {
   const PostDetailScreen({super.key, required this.postId});
@@ -52,45 +61,51 @@ class PostDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<RecyclablePost?>(
-      stream: context.read<PostService>().watch(postId),
+      stream: context.read<PostRepository>().watch(postId),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return Scaffold(
-              appBar: AppBar(),
-              body: const Center(child: CircularProgressIndicator()));
+            appBar: AppBar(),
+            body: const Center(child: CircularProgressIndicator()),
+          );
         }
         final post = snap.data;
         if (post == null) {
           return Scaffold(
-              appBar: AppBar(),
-              body: const EmptyMessage(
-                  Icons.delete_outline, 'This post was removed.'));
+            appBar: AppBar(),
+            body: const EmptyMessage(
+              Icons.delete_outline,
+              'This post was removed.',
+            ),
+          );
         }
         return Scaffold(
           appBar: AppBar(title: const Text('Recyclables')),
           body: ListView(
             padding: const EdgeInsets.only(bottom: 24),
             children: [
-              Image.network(post.photoUrl,
-                  height: 260,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Container(
-                      height: 200,
-                      color: Colors.grey.shade300,
-                      child: const Icon(Icons.image, size: 64))),
+              PostPhoto(post: post, height: 260),
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      StatusPill(post.status),
-                      LabelPill(post.label),
-                    ]),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        StatusPill(post.status),
+                        LabelPill(post.label),
+                      ],
+                    ),
                     const SizedBox(height: 12),
-                    Text(post.typesLabel,
-                        style: const TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text(
+                      post.typesLabel,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     _Info(Icons.scale, 'Amount', post.amount),
                     _Info(Icons.place, 'Barangay', post.barangay),
@@ -98,10 +113,12 @@ class PostDetailScreen extends StatelessWidget {
                     if (post.notes.isNotEmpty)
                       _Info(Icons.notes, 'Notes', post.notes),
                     if (post.label == PostLabel.forSale)
-                      const _Info(Icons.handshake, 'Price',
-                          'Agreed in person at pickup'),
-                    if (post.reservedByName != null)
-                      _CollectorInfo(post: post),
+                      const _Info(
+                        Icons.handshake,
+                        'Price',
+                        'Agreed in person at pickup',
+                      ),
+                    if (post.reservedByName != null) _CollectorInfo(post: post),
                     const SizedBox(height: 12),
                     SizedBox(
                       height: 200,
@@ -116,8 +133,11 @@ class PostDetailScreen extends StatelessWidget {
                               width: 50,
                               height: 50,
                               alignment: Alignment.topCenter,
-                              child: const Icon(Icons.location_pin,
-                                  size: 50, color: Colors.red),
+                              child: const Icon(
+                                Icons.location_pin,
+                                size: 50,
+                                color: Colors.red,
+                              ),
                             ),
                           ],
                         ),
@@ -144,23 +164,29 @@ class _Info extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, size: 26, color: Colors.black54),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text.rich(
-              TextSpan(children: [
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 26, color: Colors.black54),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
                 TextSpan(
-                    text: '$label: ',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 TextSpan(text: value),
-              ]),
-              style: const TextStyle(fontSize: 18),
+              ],
             ),
+            style: const TextStyle(fontSize: 18),
           ),
-        ]),
-      );
+        ),
+      ],
+    ),
+  );
 }
 
 /// Collector name with their average rating (shown to households).
@@ -170,17 +196,13 @@ class _CollectorInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<AppUser?>(
-      stream: context.read<AuthService>().profile(post.reservedBy!),
-      builder: (context, snap) {
-        final c = snap.data;
-        final avg = c?.averageRating;
-        final rating = avg == null
-            ? 'no ratings yet'
-            : '★ ${avg.toStringAsFixed(1)} (${c!.ratingCount})';
-        return _Info(Icons.local_shipping, 'Collector',
-            '${post.reservedByName} • $rating');
-      },
+    return StreamBuilder<CollectorRating>(
+      stream: context.read<PostRepository>().collectorRating(post.reservedBy!),
+      builder: (context, snap) => _Info(
+        Icons.local_shipping,
+        'Collector',
+        '${post.reservedByName} • ${snap.data?.label ?? '…'}',
+      ),
     );
   }
 }
@@ -192,30 +214,39 @@ class _Actions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = context.read<AppUser>();
-    final posts = context.read<PostService>();
-    final mine = post.reservedBy == user.uid;
+    final posts = context.read<PostRepository>();
+    final mine = post.reservedBy == user.id;
     final children = <Widget>[];
 
     if (user.isCollector) {
       switch (post.status) {
         case PostStatus.available:
-          children.add(FilledButton.icon(
-            onPressed: () => runWithFeedback(
-                context, () => posts.reserve(post.id, user),
-                successMessage: 'Reserved! Others can no longer take it.'),
-            icon: const Icon(Icons.bookmark_add),
-            label: const Text('Reserve'),
-          ));
+          children.add(
+            FilledButton.icon(
+              onPressed: () => runWithFeedback(
+                context,
+                () => posts.reserve(post.id),
+                successMessage: 'Reserved! Others can no longer take it.',
+              ),
+              icon: const Icon(Icons.bookmark_add),
+              label: const Text('Reserve'),
+            ),
+          );
         case PostStatus.reserved when mine:
           children.addAll([
             FilledButton.icon(
               onPressed: () async {
-                if (await confirm(context, 'Mark as collected?',
-                        'Did you already pick up these recyclables?') &&
+                if (await confirm(
+                      context,
+                      'Mark as collected?',
+                      'Did you already pick up these recyclables?',
+                    ) &&
                     context.mounted) {
                   await runWithFeedback(
-                      context, () => posts.markCollected(post.id, user.uid),
-                      successMessage: 'Marked as collected.');
+                    context,
+                    () => posts.markCollected(post.id),
+                    successMessage: 'Marked as collected.',
+                  );
                 }
               },
               icon: const Icon(Icons.check_circle),
@@ -233,16 +264,22 @@ class _Actions extends StatelessWidget {
             ),
             TextButton.icon(
               style: TextButton.styleFrom(
-                  minimumSize: const Size.fromHeight(56),
-                  foregroundColor: Colors.red.shade700,
-                  textStyle: const TextStyle(fontSize: 18)),
+                minimumSize: const Size.fromHeight(56),
+                foregroundColor: Colors.red.shade700,
+                textStyle: const TextStyle(fontSize: 18),
+              ),
               onPressed: () async {
-                if (await confirm(context, 'Cancel reservation?',
-                        'Other collectors will be able to reserve it again.') &&
+                if (await confirm(
+                      context,
+                      'Cancel reservation?',
+                      'Other collectors will be able to reserve it again.',
+                    ) &&
                     context.mounted) {
-                  await runWithFeedback(context,
-                      () => posts.cancelReservation(post.id, user.uid),
-                      successMessage: 'Reservation cancelled.');
+                  await runWithFeedback(
+                    context,
+                    () => posts.cancelReservation(post.id),
+                    successMessage: 'Reservation cancelled.',
+                  );
                 }
               },
               icon: const Icon(Icons.cancel),
@@ -250,54 +287,81 @@ class _Actions extends StatelessWidget {
             ),
           ]);
         case PostStatus.reserved:
-          children.add(const Text('Another collector reserved this.',
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 18)));
+          children.add(
+            const Text(
+              'Another collector reserved this.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18),
+            ),
+          );
         case PostStatus.collected:
-          children.add(Text(
+          children.add(
+            Text(
               mine ? 'You collected this. Salamat!' : 'Already collected.',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18)));
+              style: const TextStyle(fontSize: 18),
+            ),
+          );
       }
-    } else if (post.householdId == user.uid) {
+    } else if (post.householdId == user.id) {
       switch (post.status) {
         case PostStatus.available:
-          children.add(OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
+          children.add(
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red.shade700,
-                side: BorderSide(color: Colors.red.shade700, width: 2)),
-            onPressed: () async {
-              if (await confirm(context, 'Delete this post?',
+                side: BorderSide(color: Colors.red.shade700, width: 2),
+              ),
+              onPressed: () async {
+                if (await confirm(
+                      context,
+                      'Delete this post?',
                       'Collectors will no longer see it.',
-                      yes: 'Delete') &&
-                  context.mounted) {
-                final nav = Navigator.of(context);
-                if (await runWithFeedback(context, () => posts.delete(post),
-                    successMessage: 'Post deleted.')) {
-                  nav.pop();
+                      yes: 'Delete',
+                    ) &&
+                    context.mounted) {
+                  final nav = Navigator.of(context);
+                  if (await runWithFeedback(
+                    context,
+                    () => posts.delete(post.id),
+                    successMessage: 'Post deleted.',
+                  )) {
+                    nav.pop();
+                  }
                 }
-              }
-            },
-            icon: const Icon(Icons.delete),
-            label: const Text('Delete Post'),
-          ));
+              },
+              icon: const Icon(Icons.delete),
+              label: const Text('Delete Post'),
+            ),
+          );
         case PostStatus.reserved:
-          children.add(const Text(
+          children.add(
+            const Text(
               'A collector is coming. Agree on the price when they arrive.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18)));
+              style: TextStyle(fontSize: 18),
+            ),
+          );
         case PostStatus.collected:
           if (post.rating == null) {
-            children.add(FilledButton.icon(
-              style: FilledButton.styleFrom(
-                  backgroundColor: Colors.amber.shade800),
-              onPressed: () => rateCollectorFlow(context, post),
-              icon: const Icon(Icons.star),
-              label: const Text('Rate Collector'),
-            ));
+            children.add(
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.amber.shade800,
+                ),
+                onPressed: () => rateCollectorFlow(context, post),
+                icon: const Icon(Icons.star),
+                label: const Text('Rate Collector'),
+              ),
+            );
           } else {
-            children.add(Text('You rated: ${'★' * post.rating!}',
+            children.add(
+              Text(
+                'You rated: ${'★' * post.rating!}',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, color: Colors.amber.shade800)));
+                style: TextStyle(fontSize: 22, color: Colors.amber.shade800),
+              ),
+            );
           }
       }
     }

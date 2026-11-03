@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/app_user.dart';
-import '../../services/auth_service.dart';
+import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -31,26 +31,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _register() async {
     if (_role == null) {
-      showMessage(ScaffoldMessenger.of(context),
-          'Please choose: Household or Collector', error: true);
+      showMessage(
+        ScaffoldMessenger.of(context),
+        'Please choose: Household or Collector',
+        error: true,
+      );
       return;
     }
     if (!_form.currentState!.validate()) return;
     setState(() => _busy = true);
     try {
-      await context.read<AuthService>().register(
-            email: _email.text,
-            password: _password.text,
-            name: _name.text,
-            phone: _phone.text,
-            role: _role!,
-          );
+      await context.read<AuthRepository>().register(
+        email: _email.text,
+        password: _password.text,
+        name: _name.text,
+        phone: _phone.text,
+        role: _role!,
+      );
       // AuthGate switches to the home screen; drop this route.
       if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
     } catch (e) {
       if (mounted) {
-        showMessage(ScaffoldMessenger.of(context), friendlyAuthError(e),
-            error: true);
+        showMessage(
+          ScaffoldMessenger.of(context),
+          friendlyError(e),
+          error: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -69,20 +75,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
           decoration: BoxDecoration(
             color: selected ? color.withValues(alpha: 0.12) : null,
             border: Border.all(
-                color: selected ? color : Colors.grey.shade400,
-                width: selected ? 3 : 1.5),
+              color: selected ? color : Colors.grey.shade400,
+              width: selected ? 3 : 1.5,
+            ),
             borderRadius: BorderRadius.circular(16),
           ),
-          child: Column(children: [
-            Icon(icon, size: 52, color: selected ? color : Colors.grey),
-            const SizedBox(height: 6),
-            Text(title,
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            Text(sub,
+          child: Column(
+            children: [
+              Icon(icon, size: 52, color: selected ? color : Colors.grey),
+              const SizedBox(height: 6),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                sub,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 15, color: Colors.black54)),
-          ]),
+                style: const TextStyle(fontSize: 15, color: Colors.black54),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -100,24 +115,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('I am a…',
-                    style:
-                        TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                const Text(
+                  'I am a…',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 10),
-                Row(children: [
-                  _roleCard(UserRole.household, Icons.home, 'Household',
-                      'I have recyclables'),
-                  const SizedBox(width: 12),
-                  _roleCard(UserRole.collector, Icons.local_shipping,
-                      'Collector', 'I pick up recyclables'),
-                ]),
+                Row(
+                  children: [
+                    _roleCard(
+                      UserRole.household,
+                      Icons.home,
+                      'Household',
+                      'I have recyclables',
+                    ),
+                    const SizedBox(width: 12),
+                    _roleCard(
+                      UserRole.collector,
+                      Icons.local_shipping,
+                      'Collector',
+                      'I pick up recyclables',
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 24),
                 TextFormField(
                   controller: _name,
                   textCapitalization: TextCapitalization.words,
                   style: const TextStyle(fontSize: 19),
                   decoration: const InputDecoration(
-                      labelText: 'Full name', prefixIcon: Icon(Icons.person)),
+                    labelText: 'Full name',
+                    prefixIcon: Icon(Icons.person),
+                  ),
                   validator: (v) =>
                       (v ?? '').trim().isEmpty ? 'Enter your name' : null,
                 ),
@@ -127,8 +155,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   keyboardType: TextInputType.phone,
                   style: const TextStyle(fontSize: 19),
                   decoration: const InputDecoration(
-                      labelText: 'Mobile number (09xx…)',
-                      prefixIcon: Icon(Icons.phone)),
+                    labelText: 'Mobile number (09xx…)',
+                    prefixIcon: Icon(Icons.phone),
+                  ),
                   validator: (v) {
                     final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
                     return digits.length < 10
@@ -142,7 +171,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   keyboardType: TextInputType.emailAddress,
                   style: const TextStyle(fontSize: 19),
                   decoration: const InputDecoration(
-                      labelText: 'Email', prefixIcon: Icon(Icons.email)),
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email),
+                  ),
                   validator: (v) =>
                       (v ?? '').contains('@') ? null : 'Enter a valid email',
                 ),
@@ -152,11 +183,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   obscureText: true,
                   style: const TextStyle(fontSize: 19),
                   decoration: const InputDecoration(
-                      labelText: 'Password (6+ characters)',
-                      prefixIcon: Icon(Icons.lock)),
-                  validator: (v) => (v ?? '').length < 6
-                      ? 'At least 6 characters'
-                      : null,
+                    labelText: 'Password (6+ characters)',
+                    prefixIcon: Icon(Icons.lock),
+                  ),
+                  validator: (v) =>
+                      (v ?? '').length < 6 ? 'At least 6 characters' : null,
                 ),
                 const SizedBox(height: 28),
                 FilledButton.icon(

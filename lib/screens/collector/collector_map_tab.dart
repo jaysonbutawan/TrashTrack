@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../../constants.dart';
 import '../../models/app_user.dart';
 import '../../models/post.dart';
-import '../../services/post_service.dart';
+import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 import '../../widgets/tagum_map.dart';
 import '../common/post_detail_screen.dart';
@@ -20,8 +20,9 @@ class CollectorMapTab extends StatefulWidget {
 
 class _CollectorMapTabState extends State<CollectorMapTab> {
   final _map = MapController();
-  late final Stream<List<RecyclablePost>> _posts =
-      context.read<PostService>().availablePosts();
+  late final Stream<List<RecyclablePost>> _posts = context
+      .read<PostRepository>()
+      .availablePosts();
 
   /// Empty = show all types.
   final Set<RecyclableType> _types = {};
@@ -56,10 +57,13 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              PostCard(post: p, onTap: () {
-                Navigator.pop(ctx);
-                openPostDetail(context, p.id);
-              }),
+              PostCard(
+                post: p,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  openPostDetail(context, p.id);
+                },
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: FilledButton.icon(
@@ -116,7 +120,8 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
                         label: Text(t.label),
                         selected: _types.contains(t),
                         onSelected: (v) => setState(
-                            () => v ? _types.add(t) : _types.remove(t)),
+                          () => v ? _types.add(t) : _types.remove(t),
+                        ),
                       ),
                     ),
                 ],
@@ -151,11 +156,13 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
                           alignment: Alignment.topCenter,
                           child: GestureDetector(
                             onTap: () => _showSummary(p),
-                            child: Icon(Icons.location_pin,
-                                size: 54,
-                                color: p.label == PostLabel.free
-                                    ? Colors.teal.shade600
-                                    : Colors.indigo.shade600),
+                            child: Icon(
+                              Icons.location_pin,
+                              size: 54,
+                              color: p.label == PostLabel.free
+                                  ? Colors.teal.shade600
+                                  : Colors.indigo.shade600,
+                            ),
                           ),
                         ),
                     ],
@@ -166,15 +173,19 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
                     child: Card(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         child: Text(
                           snap.hasError
                               ? 'Could not load posts'
                               : !snap.hasData
-                                  ? 'Loading…'
-                                  : '${shown.length} available',
+                              ? 'Loading…'
+                              : '${shown.length} available',
                           style: const TextStyle(
-                              fontSize: 17, fontWeight: FontWeight.bold),
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -221,8 +232,11 @@ class _Legend extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.location_pin, color: color, size: 22),
-        Text(text, style: const TextStyle(fontSize: 15)),
-      ]);
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(Icons.location_pin, color: color, size: 22),
+      Text(text, style: const TextStyle(fontSize: 15)),
+    ],
+  );
 }

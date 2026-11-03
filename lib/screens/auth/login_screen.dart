@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../services/auth_service.dart';
+import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 import 'register_screen.dart';
 
@@ -29,15 +29,27 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_form.currentState!.validate()) return;
     setState(() => _busy = true);
     try {
-      await context.read<AuthService>().signIn(_email.text, _password.text);
+      await context.read<AuthRepository>().signIn(
+        email: _email.text,
+        password: _password.text,
+      );
     } catch (e) {
       if (mounted) {
-        showMessage(ScaffoldMessenger.of(context), friendlyAuthError(e),
-            error: true);
+        showMessage(
+          ScaffoldMessenger.of(context),
+          friendlyError(e),
+          error: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _demo(String email) {
+    _email.text = email;
+    _password.text = 'demo123';
+    _login();
   }
 
   @override
@@ -52,23 +64,31 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(Icons.recycling,
-                      size: 96, color: Theme.of(context).colorScheme.primary),
+                  Icon(
+                    Icons.recycling,
+                    size: 96,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(height: 8),
-                  const Text('Bote-Bakal Tagum',
-                      textAlign: TextAlign.center,
-                      style:
-                          TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
-                  const Text('Recyclables pickup for Tagum City',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 18, color: Colors.black54)),
+                  const Text(
+                    'Bote-Bakal Tagum',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
+                  ),
+                  const Text(
+                    'Recyclables pickup for Tagum City',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18, color: Colors.black54),
+                  ),
                   const SizedBox(height: 32),
                   TextFormField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
                     style: const TextStyle(fontSize: 19),
                     decoration: const InputDecoration(
-                        labelText: 'Email', prefixIcon: Icon(Icons.email)),
+                      labelText: 'Email',
+                      prefixIcon: Icon(Icons.email),
+                    ),
                     validator: (v) =>
                         (v ?? '').trim().isEmpty ? 'Enter your email' : null,
                   ),
@@ -78,7 +98,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     obscureText: true,
                     style: const TextStyle(fontSize: 19),
                     decoration: const InputDecoration(
-                        labelText: 'Password', prefixIcon: Icon(Icons.lock)),
+                      labelText: 'Password',
+                      prefixIcon: Icon(Icons.lock),
+                    ),
                     validator: (v) =>
                         (v ?? '').isEmpty ? 'Enter your password' : null,
                     onFieldSubmitted: (_) => _login(),
@@ -96,9 +118,47 @@ class _LoginScreenState extends State<LoginScreen> {
                         : () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (_) => const RegisterScreen())),
+                              builder: (_) => const RegisterScreen(),
+                            ),
+                          ),
                     icon: const Icon(Icons.person_add),
                     label: const Text('Create Account'),
+                  ),
+                  // Demo shortcuts while the app runs on static data.
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Try the demo:',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: _busy
+                              ? null
+                              : () => _demo('household@demo.ph'),
+                          icon: const Icon(Icons.home),
+                          label: const Text(
+                            'Household',
+                            style: TextStyle(fontSize: 17),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: _busy
+                              ? null
+                              : () => _demo('collector@demo.ph'),
+                          icon: const Icon(Icons.local_shipping),
+                          label: const Text(
+                            'Collector',
+                            style: TextStyle(fontSize: 17),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

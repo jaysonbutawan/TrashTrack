@@ -3,8 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../constants.dart';
-import '../../models/app_user.dart';
-import '../../services/route_service.dart';
+import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 
 class ScheduleRouteScreen extends StatefulWidget {
@@ -39,7 +38,9 @@ class _ScheduleRouteScreenState extends State<ScheduleRouteScreen> {
 
   Future<void> _pickTime() async {
     final t = await showTimePicker(
-        context: context, initialTime: _time ?? const TimeOfDay(hour: 8, minute: 0));
+      context: context,
+      initialTime: _time ?? const TimeOfDay(hour: 8, minute: 0),
+    );
     if (t != null) setState(() => _time = t);
   }
 
@@ -50,35 +51,45 @@ class _ScheduleRouteScreenState extends State<ScheduleRouteScreen> {
       return;
     }
     if (_barangays.isEmpty) {
-      showMessage(messenger, 'Please choose at least one barangay.', error: true);
+      showMessage(
+        messenger,
+        'Please choose at least one barangay.',
+        error: true,
+      );
       return;
     }
     final start = DateTime(
-        _date!.year, _date!.month, _date!.day, _time!.hour, _time!.minute);
+      _date!.year,
+      _date!.month,
+      _date!.day,
+      _time!.hour,
+      _time!.minute,
+    );
     if (start.isBefore(DateTime.now())) {
       showMessage(messenger, 'That time has already passed.', error: true);
       return;
     }
-    final user = context.read<AppUser>();
-    final routes = context.read<RouteService>();
+    final routes = context.read<RouteRepository>();
     final ok = await runWithFeedback(
       context,
       () => routes.schedule(
-        collector: user,
         startTime: start,
         barangays: tagumBarangays.where(_barangays.contains).toList(),
         note: _note.text,
       ),
-      successMessage: 'Route saved. Households in those barangays will be notified.',
+      successMessage:
+          'Route saved. Households in those barangays will be notified.',
     );
     if (ok && mounted) Navigator.pop(context);
   }
 
   Widget _section(String t) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-        child: Text(t,
-            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
-      );
+    padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+    child: Text(
+      t,
+      style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -90,32 +101,39 @@ class _ScheduleRouteScreenState extends State<ScheduleRouteScreen> {
           _section('1. When?'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickDate,
-                  icon: const Icon(Icons.calendar_month),
-                  label: Text(_date == null
-                      ? 'Date'
-                      : DateFormat('MMM d').format(_date!)),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDate,
+                    icon: const Icon(Icons.calendar_month),
+                    label: Text(
+                      _date == null
+                          ? 'Date'
+                          : DateFormat('MMM d').format(_date!),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickTime,
-                  icon: const Icon(Icons.schedule),
-                  label: Text(_time == null ? 'Time' : _time!.format(context)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickTime,
+                    icon: const Icon(Icons.schedule),
+                    label: Text(
+                      _time == null ? 'Time' : _time!.format(context),
+                    ),
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
           ),
           _section('2. Which barangays? (${_barangays.length} chosen)'),
           for (final b in tagumBarangays)
             CheckboxListTile(
               value: _barangays.contains(b),
               onChanged: (v) => setState(
-                  () => v == true ? _barangays.add(b) : _barangays.remove(b)),
+                () => v == true ? _barangays.add(b) : _barangays.remove(b),
+              ),
               title: Text(b, style: const TextStyle(fontSize: 19)),
             ),
           _section('Note (optional)'),
@@ -125,7 +143,8 @@ class _ScheduleRouteScreenState extends State<ScheduleRouteScreen> {
               controller: _note,
               style: const TextStyle(fontSize: 18),
               decoration: const InputDecoration(
-                  hintText: 'e.g. Buying bakal and bote, Php per kilo'),
+                hintText: 'e.g. Buying bakal and bote, Php per kilo',
+              ),
             ),
           ),
         ],

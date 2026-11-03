@@ -9,20 +9,26 @@ ThemeData buildTheme() {
   final bigText = base.textTheme.apply(fontSizeFactor: 1.15);
   const buttonText = TextStyle(fontSize: 20, fontWeight: FontWeight.bold);
   const buttonSize = Size.fromHeight(60);
-  final buttonShape =
-      RoundedRectangleBorder(borderRadius: BorderRadius.circular(14));
+  final buttonShape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(14),
+  );
 
   return base.copyWith(
     textTheme: bigText,
     appBarTheme: AppBarTheme(
       backgroundColor: green,
       foregroundColor: Colors.white,
-      titleTextStyle: bigText.titleLarge
-          ?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+      titleTextStyle: bigText.titleLarge?.copyWith(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+      ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-          minimumSize: buttonSize, textStyle: buttonText, shape: buttonShape),
+        minimumSize: buttonSize,
+        textStyle: buttonText,
+        shape: buttonShape,
+      ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
@@ -43,7 +49,8 @@ ThemeData buildTheme() {
     ),
     navigationBarTheme: NavigationBarThemeData(
       labelTextStyle: WidgetStateProperty.all(
-          const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      ),
     ),
   );
 }
