@@ -2,26 +2,27 @@
 
 import 'package:latlong2/latlong.dart';
 
-import '../../constants.dart' show RecyclableType;
-import '../../models/app_user.dart';
-import '../../models/post.dart';
-import '../../models/route_schedule.dart';
+import 'package:hitchmeup/constants.dart' show RecyclableType;
+import 'package:hitchmeup/models/app_user.dart';
+import 'package:hitchmeup/models/post.dart';
+import 'package:hitchmeup/models/route_schedule.dart';
 
-const demoPassword = 'demo123';
-
-final mockAccounts = <String, AppUser>{
-  'household@demo.ph': const AppUser(
+/// Demo accounts by role (one tap on the login screen in demo mode).
+final mockAccounts = <UserRole, AppUser>{
+  UserRole.household: const AppUser(
     id: 'u-household-1',
     name: 'Maria Santos',
     phone: '09171234567',
     role: UserRole.household,
+    email: 'household@demo.ph',
     followedBarangays: ['Magugpo Poblacion', 'Visayan Village'],
   ),
-  'collector@demo.ph': const AppUser(
+  UserRole.collector: const AppUser(
     id: 'u-collector-1',
     name: 'Jun Dela Cruz',
     phone: '09281234567',
     role: UserRole.collector,
+    email: 'collector@demo.ph',
   ),
 };
 
@@ -32,7 +33,7 @@ List<RecyclablePost> buildMockPosts() {
     required String householdId,
     required String householdName,
     required List<RecyclableType> types,
-    required String amount,
+    required double weightKg,
     required double lat,
     required double lng,
     required String barangay,
@@ -49,7 +50,7 @@ List<RecyclablePost> buildMockPosts() {
     householdPhone: '09170000000',
     photoUrl: '',
     types: types,
-    amount: amount,
+    weightKg: weightKg,
     location: LatLng(lat, lng),
     barangay: barangay,
     label: label,
@@ -62,6 +63,9 @@ List<RecyclablePost> buildMockPosts() {
     reservedByName: status == PostStatus.available
         ? null
         : (reservedByDemoCollector ? 'Jun Dela Cruz' : 'Rodel Ampit'),
+    reservedAt: status == PostStatus.available
+        ? null
+        : now.subtract(Duration(hours: hoursAgo, minutes: -30)),
     collectedAt: status == PostStatus.collected
         ? now.subtract(Duration(hours: hoursAgo - 1))
         : null,
@@ -75,7 +79,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-1',
       householdName: 'Maria Santos',
       types: [RecyclableType.plastic, RecyclableType.cans],
-      amount: '2 sacks',
+      weightKg: 8,
       lat: 7.4472,
       lng: 125.8065,
       barangay: 'Magugpo Poblacion',
@@ -88,7 +92,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-1',
       householdName: 'Maria Santos',
       types: [RecyclableType.metal],
-      amount: 'About 15 kg',
+      weightKg: 15,
       lat: 7.4480,
       lng: 125.8072,
       barangay: 'Magugpo Poblacion',
@@ -102,7 +106,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-1',
       householdName: 'Maria Santos',
       types: [RecyclableType.glass],
-      amount: '1 box of bottles',
+      weightKg: 6,
       lat: 7.4469,
       lng: 125.8060,
       barangay: 'Magugpo Poblacion',
@@ -111,13 +115,59 @@ List<RecyclablePost> buildMockPosts() {
       reservedByDemoCollector: true,
       hoursAgo: 48,
     ),
+    post(
+      'p12',
+      householdId: 'u-household-1',
+      householdName: 'Maria Santos',
+      types: [RecyclableType.plastic, RecyclableType.cans],
+      weightKg: 6.5,
+      lat: 7.4474,
+      lng: 125.8068,
+      barangay: 'Magugpo Poblacion',
+      label: PostLabel.free,
+      status: PostStatus.collected,
+      reservedByDemoCollector: true,
+      hoursAgo: 24 * 6,
+      rating: 5,
+    ),
+    post(
+      'p13',
+      householdId: 'u-household-1',
+      householdName: 'Maria Santos',
+      types: [RecyclableType.cardboard, RecyclableType.paper],
+      weightKg: 12,
+      lat: 7.4471,
+      lng: 125.8063,
+      barangay: 'Magugpo Poblacion',
+      label: PostLabel.forSale,
+      status: PostStatus.collected,
+      hoursAgo: 24 * 15,
+      rating: 4,
+      notes: 'Boxes from the store renovation',
+    ),
+    post(
+      'p14',
+      householdId: 'u-household-1',
+      householdName: 'Maria Santos',
+      types: [RecyclableType.metal],
+      weightKg: 20,
+      lat: 7.4300,
+      lng: 125.7962,
+      barangay: 'Visayan Village',
+      label: PostLabel.forSale,
+      status: PostStatus.collected,
+      reservedByDemoCollector: true,
+      hoursAgo: 24 * 34,
+      rating: 5,
+      notes: "At Lola's house",
+    ),
     // Other households around Tagum
     post(
       'p4',
       householdId: 'u-household-2',
       householdName: 'Lito Bautista',
       types: [RecyclableType.cardboard, RecyclableType.paper],
-      amount: '1 sack',
+      weightKg: 4,
       lat: 7.4535,
       lng: 125.8110,
       barangay: 'Magugpo North',
@@ -129,7 +179,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-3',
       householdName: 'Ana Reyes',
       types: [RecyclableType.appliances],
-      amount: '1 old refrigerator',
+      weightKg: 45,
       lat: 7.4300,
       lng: 125.7960,
       barangay: 'Visayan Village',
@@ -142,7 +192,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-4',
       householdName: 'Joy Villanueva',
       types: [RecyclableType.glass, RecyclableType.plastic],
-      amount: 'About 30 bottles',
+      weightKg: 9,
       lat: 7.4625,
       lng: 125.8225,
       barangay: 'Apokon',
@@ -154,7 +204,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-5',
       householdName: 'Nestor Lim',
       types: [RecyclableType.metal, RecyclableType.cans],
-      amount: '3 sacks',
+      weightKg: 18,
       lat: 7.4180,
       lng: 125.8150,
       barangay: 'Mankilam',
@@ -166,7 +216,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-6',
       householdName: 'Grace Tan',
       types: [RecyclableType.paper],
-      amount: 'Old newspapers, 1 bundle',
+      weightKg: 5,
       lat: 7.4400,
       lng: 125.8250,
       barangay: 'Magugpo East',
@@ -178,7 +228,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-7',
       householdName: 'Ramon Cruz',
       types: [RecyclableType.plastic],
-      amount: '1 sack of PET bottles',
+      weightKg: 3.5,
       lat: 7.4710,
       lng: 125.7930,
       barangay: 'La Filipina',
@@ -190,7 +240,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-8',
       householdName: 'Elena Gomez',
       types: [RecyclableType.metal],
-      amount: 'Scrap iron, ~25 kg',
+      weightKg: 25,
       lat: 7.4390,
       lng: 125.7990,
       barangay: 'Magugpo West',
@@ -204,7 +254,7 @@ List<RecyclablePost> buildMockPosts() {
       householdId: 'u-household-9',
       householdName: 'Pedro Alcantara',
       types: [RecyclableType.cardboard],
-      amount: '10 flattened boxes',
+      weightKg: 7,
       lat: 7.4280,
       lng: 125.8060,
       barangay: 'Magugpo South',

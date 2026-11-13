@@ -1,34 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'data/mock/mock_backend.dart';
+import 'config.dart';
+import 'data/noop_push.dart';
 import 'data/repositories.dart';
+import 'data/supabase/supabase_backend.dart';
 import 'models/app_user.dart';
+import 'screens/auth/finish_signup_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/collector/collector_home.dart';
 import 'screens/household/household_home.dart';
+import 'screens/auth/setup_needed_screen.dart';
 import 'theme.dart';
+import 'widgets/brand_splash.dart';
+import 'widgets/common.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ── Backend wiring ────────────────────────────────────────────────
-  // Static demo data for now. To use Supabase, initialize it here and
-  // replace these four with Supabase implementations of the same interfaces.
-  final store = MockStore();
-  final AuthRepository auth = MockAuthRepository(store);
-  final PostRepository posts = MockPostRepository(store);
-  final RouteRepository routes = MockRouteRepository(store);
-  final PushService push = MockPushService();
-  // ──────────────────────────────────────────────────────────────────
+  final config = await AppConfig.load();
+  if (!config.hasSupabase) {
+    runApp(const SetupNeededApp());
+    return;
+  }
+  await Supabase.initialize(
+    url: config.supabaseUrl,
+    publishableKey: config.supabaseKey,
+  );
 
   runApp(
     MultiProvider(
       providers: [
-        Provider.value(value: auth),
-        Provider.value(value: posts),
-        Provider.value(value: routes),
-        Provider.value(value: push),
+        Provider<AuthRepository>.value(
+          value: SupabaseAuthRepository(
+            googleWebClientId: config.googleWebClientId,
+          ),
+        ),
+        Provider<PostRepository>.value(value: SupabasePostRepository()),
+        Provider<RouteRepository>.value(value: SupabaseRouteRepository()),
+        Provider<PushService>.value(value: NoopPushService()),
       ],
       child: const BoteBakalApp(),
     ),
@@ -44,12 +55,14 @@ class BoteBakalApp extends StatelessWidget {
       title: 'Bote-Bakal Tagum',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
+      scaffoldMessengerKey: rootMessenger,
       home: const AuthGate(),
     );
   }
 }
 
-/// Signed out → login. Signed in → household or collector home.
+/// Signed out → login. First Google login → save the chosen role.
+/// Otherwise → household or collector home.
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
@@ -67,20 +80,44 @@ class _AuthGateState extends State<AuthGate> {
     return StreamBuilder<AppUser?>(
       stream: _user,
       builder: (context, snap) {
+        final user = snap.data;
+        final Widget screen;
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+          screen = const BrandSplash(key: ValueKey('splash'));
+        } else if (user == null) {
+          screen = const LoginScreen(key: ValueKey('login'));
+        } else if (user.needsProfile) {
+          screen = FinishSignUpScreen(
+            key: ValueKey('finish-${user.id}'),
+            user: user,
+          );
+        } else {
+          screen = Provider<AppUser>.value(
+            key: ValueKey('home-${user.id}'),
+            value: user,
+            child: user.isCollector
+                ? const CollectorHome()
+                : const HouseholdHome(),
           );
         }
-        final user = snap.data;
-        if (user == null) return const LoginScreen();
-        return Provider<AppUser>.value(
-          value: user,
-          child: user.isCollector
-              ? CollectorHome(key: ValueKey(user.id))
-              : HouseholdHome(key: ValueKey(user.id)),
+        // Fade between login, loading and home instead of a hard cut.
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          child: screen,
         );
       },
     );
   }
+}
+
+/// Shown when .env has no Supabase keys, instead of crashing.
+class SetupNeededApp extends StatelessWidget {
+  const SetupNeededApp({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: buildTheme(),
+    home: const SetupNeededScreen(),
+  );
 }

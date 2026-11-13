@@ -1,9 +1,8 @@
 // BACKEND ENDPOINTS
 //
-// The UI only talks to these interfaces. Right now they are implemented by
-// static in-memory data (lib/data/mock/). To connect Supabase, write one
-// class per interface (e.g. `SupabasePostRepository implements PostRepository`)
-// and swap them in lib/main.dart — no screen code changes.
+// The UI only talks to these interfaces. The app uses the Supabase
+// implementation in lib/data/supabase/; the tests use an in-memory one in
+// test/support/.
 //
 // Each method notes the Supabase table / RPC it maps to (supabase/schema.sql).
 // Methods that fail should throw [BackendException] with a message that is
@@ -25,25 +24,32 @@ abstract class AuthRepository {
   /// Supabase: `auth.onAuthStateChange` + `profiles` row (realtime).
   Stream<AppUser?> currentUser();
 
-  /// Supabase: `auth.signInWithPassword`.
-  Future<void> signIn({required String email, required String password});
+  /// Native Google one-tap account sheet, then `auth.signInWithIdToken`.
+  /// Only Google-verified emails can sign in, which keeps out spam accounts.
+  ///
+  /// [role] is what the user picked on the login screen. A brand-new account
+  /// is given that role before this returns (`rpc('complete_profile')`); an
+  /// existing account keeps its role, which is returned so the UI can mention
+  /// it if it differs. [currentUser] only emits once the account is ready.
+  /// Throws [SignInCancelled] if the user closes the sheet.
+  Future<UserRole?> signInWithGoogle(UserRole role);
 
-  /// Supabase: `auth.signUp` with `data: {name, phone, role}`;
-  /// the `handle_new_user` trigger creates the `profiles` row.
-  Future<void> register({
-    required String email,
-    required String password,
-    required String name,
-    required String phone,
-    required UserRole role,
-  });
+  /// Fallback for an account that still has no role (sign-in was interrupted
+  /// half-way): `rpc('complete_profile', {p_role})`.
+  Future<void> finishSignUp(UserRole role);
 
-  /// Supabase: `auth.signOut`.
+  /// Supabase: `update profiles set phone = ...` (asked before the first post).
+  Future<void> updatePhone(String phone);
+
+  /// Supabase: `auth.signOut` (and Google sign-out).
   Future<void> signOut();
 
   /// Supabase: `update profiles set followed_barangays = ... where id = auth.uid()`.
   Future<void> setFollowedBarangays(List<String> barangays);
 }
+
+/// Thrown when the user closes the Google account picker. Not an error.
+class SignInCancelled implements Exception {}
 
 abstract class PostRepository {
   /// Supabase: `posts` where `household_id = uid`, newest first (realtime).
@@ -61,6 +67,10 @@ abstract class PostRepository {
   /// Supabase: upload photo to storage bucket `post-photos/{uid}/{uuid}.jpg`,
   /// then insert into `posts`.
   Future<void> create(NewPost post);
+
+  /// Supabase: optional new photo upload, then `update posts` (RLS: owner,
+  /// only while available). Fails if a collector reserved it meanwhile.
+  Future<void> update(String postId, NewPost post);
 
   /// Supabase: delete from `posts` (RLS: owner, only while available).
   Future<void> delete(String postId);
@@ -101,7 +111,7 @@ abstract class RouteRepository {
 }
 
 /// Push alerts for collector routes. With Supabase this is usually FCM
-/// (topic per barangay) triggered by an Edge Function; the mock does nothing.
+/// (topic per barangay) triggered by an Edge Function; NoopPushService does nothing for now.
 abstract class PushService {
   Future<void> requestPermission();
   Future<void> syncFollowedBarangays(List<String> barangays);

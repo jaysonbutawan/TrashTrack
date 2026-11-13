@@ -13,6 +13,7 @@ class TagumMap extends StatelessWidget {
     this.initialCenter,
     this.initialZoom = 13,
     this.markers = const [],
+    this.polylines = const [],
     this.onTap,
   });
 
@@ -20,6 +21,9 @@ class TagumMap extends StatelessWidget {
   final LatLng? initialCenter;
   final double initialZoom;
   final List<Marker> markers;
+
+  /// Lines drawn under the markers (e.g. a suggested route).
+  final List<Polyline> polylines;
   final void Function(LatLng)? onTap;
 
   @override
@@ -44,9 +48,14 @@ class TagumMap extends StatelessWidget {
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.hitchmeup.hitchmeup',
         ),
+        if (polylines.isNotEmpty) PolylineLayer(polylines: polylines),
         MarkerLayer(markers: markers),
-        const SimpleAttributionWidget(
-          source: Text('OpenStreetMap contributors'),
+        // The app's large text would make the credit line overflow.
+        const DefaultTextStyle(
+          style: TextStyle(fontSize: 11, color: Colors.black87),
+          child: SimpleAttributionWidget(
+            source: Text('OpenStreetMap contributors'),
+          ),
         ),
       ],
     );

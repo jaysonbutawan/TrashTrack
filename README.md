@@ -2,79 +2,80 @@
 
 Android app (Flutter) for Tagum City, Philippines, that connects households with bote-bakal (recyclable) collectors.
 
-- **Households** post recyclables with a photo, the types, an estimated amount, a map pin and a For Sale / Free label. They follow barangays to get alerts about collector routes, and they rate the collector after pickup.
+- **Households** post recyclables with a photo, the types, an estimated weight in kg, a map pin and a For Sale / Free label. They can edit a post until a collector reserves it, search and filter their posts, see past pickups, follow barangays to get alerts about collector routes, and rate the collector after pickup.
 - **Collectors** see available posts on a map, filter them by type and by For Sale / Free, and reserve a post so other collectors can't take it. They mark posts as collected and schedule routes (date, time, barangays).
 
 The app doesn't handle payment. The price is agreed in person at pickup. Only places inside Tagum City are allowed for now.
 
 Post status: **Available → Reserved → Collected**. A collector can cancel a reservation, which makes the post Available again.
 
-## Current state: UI on static data
+## Sign-in
 
-There is no backend yet. The app runs on sample data kept in memory (`lib/data/mock/`), so every screen can be tried and designed. Changes you make while using it (posting, reserving, rating) last until you restart the app.
+Sign-in is **Google only**. On the login screen you tap **I'm a Household** or **I'm a Collector**, and Google's one-tap account sheet opens. A new account gets the role you tapped; an existing account keeps its role. Every account has an email Google has already verified, which keeps spam and throwaway accounts out, and nobody has a password to forget. Households are asked for a mobile number once, just before their first post, so collectors can call them.
 
-Demo logins (or tap **Try the demo** on the login screen):
-
-| Role | Email | Password |
-|---|---|---|
-| Household | `household@demo.ph` | `demo123` |
-| Collector | `collector@demo.ph` | `demo123` |
-
-Run on the build machine (Windows, with the Android SDK):
+## Running
 
 ```
 flutter pub get
 flutter run
 ```
 
-## Connecting Supabase later
+The app always uses the real Supabase backend and reads its keys from **`.env`** (copy `.env.example`). If the keys are missing it shows a *Backend not connected* screen. The tests use an in-memory copy of the backend in `test/support/`.
 
-The screens never call a backend directly. They only use the interfaces in **`lib/data/repositories.dart`**, which are the backend endpoints:
+## Connecting Supabase
 
-| Interface | What it does | Supabase |
-|---|---|---|
-| `AuthRepository` | sign in/up/out, current profile, follow barangays | `auth`, `profiles` |
-| `PostRepository` | list/watch/create/delete posts, reserve, cancel, collect, rate | `posts`, storage `post-photos`, RPCs |
-| `RouteRepository` | schedule/list/delete collector routes | `routes` |
-| `PushService` | route alerts on this phone | FCM + Edge Function |
+### 1. Database
+Create a Supabase project, open **SQL Editor**, paste **`supabase/schema.sql`** and run it. It creates the tables, row-level security, triggers, the `post-photos` storage bucket, realtime, and the `complete_profile` / `reserve_post` / `cancel_reservation` / `mark_collected` / `rate_collector` functions.
 
-Steps:
-1. Create a Supabase project and run **`supabase/schema.sql`** in the SQL editor. It creates the tables, the security rules (RLS), the storage bucket, realtime, and the atomic `reserve_post` / `cancel_reservation` / `mark_collected` / `rate_collector` functions.
-2. `flutter pub add supabase_flutter`
-3. Write `lib/data/supabase/…` classes that implement the four interfaces. Each method in `repositories.dart` has a comment naming the table or RPC it maps to. The models already have `fromMap()` with matching column names. For example:
-   ```dart
-   @override
-   Stream<List<RecyclablePost>> availablePosts() => supabase
-       .from('posts')
-       .stream(primaryKey: ['id'])
-       .eq('status', 'available')
-       .map((rows) => rows.map(RecyclablePost.fromMap).toList());
+### 2. Google sign-in
+In **Google Cloud Console → APIs & Services → Credentials**:
 
-   @override
-   Future<void> reserve(String postId) async {
-     try {
-       await supabase.rpc('reserve_post', params: {'post_id': postId});
-     } on PostgrestException catch (e) {
-       throw BackendException(e.message); // shown to the user as-is
-     }
-   }
+1. **OAuth consent screen**: set it up (External, app name, support email).
+2. **Create OAuth client ID → Web application.** Copy its *Client ID* and *Client secret*.
+3. **Create OAuth client ID → Android.** Package name `com.hitchmeup.hitchmeup`, plus the SHA-1 of your signing key:
    ```
-4. In `lib/main.dart`, call `Supabase.initialize(...)` and swap the four `Mock…` objects for the Supabase ones. No screen code changes.
+   cd android
+   ./gradlew signingReport      # use the SHA1 under "Variant: debug"
+   ```
+   (Add the release key's SHA-1 too before publishing.)
+
+In **Supabase → Authentication → Sign In / Providers → Google**: enable it, paste the **Web** client ID and secret, and save.
+If sign-in later fails with a *nonce* error, turn on **Skip nonce check** on the same page.
+
+### 3. `.env`
+```
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...     # or the legacy anon key
+GOOGLE_WEB_CLIENT_ID=1234-abc.apps.googleusercontent.com   # the WEB client, not Android
+```
+Restart the app (a full restart, not hot reload). `.env` is git-ignored. The publishable key is safe to ship in the app because row-level security protects the data.
+
+### How it's wired
+The screens only use the interfaces in **`lib/data/repositories.dart`**. `lib/main.dart` picks the implementation at start-up:
+
+| Interface | Supabase (`lib/data/supabase/`) |
+|---|---|
+| `AuthRepository` | Google → `auth.signInWithIdToken`, `profiles`, `complete_profile` |
+| `PostRepository` | `posts` (realtime), storage `post-photos`, status RPCs |
+| `RouteRepository` | `routes` (realtime) |
+| `PushService` | not wired yet (FCM + Edge Function later) |
 
 ## Project layout
 
 ```
 lib/
   main.dart                 App start + backend wiring (mock ↔ Supabase)
+  config.dart               Reads .env
   constants.dart            Barangays, recyclable types, Tagum map limits
   data/repositories.dart    Backend endpoints (interfaces)
-  data/mock/                Static demo data + in-memory implementation
+  data/supabase/            Supabase implementation
   models/                   AppUser, RecyclablePost, RouteSchedule
-  screens/auth/             Login, Register (choose Household or Collector)
+  screens/auth/             Role + Google login, first-login role save
   screens/household/        My Posts, Create Post, Routes, Follow Barangays
   screens/collector/        Map with filters, Reserved, Routes, Schedule Route
   screens/common/           Post details and actions
-  widgets/                  Shared UI (big buttons, status labels, map)
+  widgets/                  Shared UI (post card, type colors, kg stepper,
+                            barangay picker, route tile, map)
 supabase/schema.sql         Database schema for the real backend
 ```
 

@@ -1,27 +1,32 @@
 -- Bote-Bakal Tagum — Supabase schema
--- Run in the Supabase SQL editor. Matches the endpoints in lib/data/repositories.dart
--- and the column names read by the models' fromMap() in lib/models/.
+-- Run once in the Supabase SQL editor on a new project. Matches the endpoints
+-- in lib/data/repositories.dart and the column names read by the models'
+-- fromMap() in lib/models/.
 
 -- ───────────────────────── profiles ─────────────────────────
+-- One row per Google account. `role` stays NULL until the app saves the
+-- role picked on the login screen (complete_profile below).
 create table public.profiles (
   id                 uuid primary key references auth.users on delete cascade,
-  name               text not null,
-  phone              text not null,
-  role               text not null check (role in ('household', 'collector')),
+  name               text not null default '',
+  phone              text not null default '',
+  email              text not null default '',
+  avatar_url         text not null default '',
+  role               text check (role in ('household', 'collector')),
   followed_barangays text[] not null default '{}',
   created_at         timestamptz not null default now()
 );
 
--- Create the profile from sign-up metadata: auth.signUp(data: {name, phone, role}).
+-- Create the profile from the Google account on first sign-in.
 create function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, name, phone, role)
+  insert into public.profiles (id, name, email, avatar_url)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'name', ''),
-    coalesce(new.raw_user_meta_data->>'phone', ''),
-    coalesce(new.raw_user_meta_data->>'role', 'household')
+    coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', ''),
+    coalesce(new.email, ''),
+    coalesce(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture', '')
   );
   return new;
 end $$;
@@ -34,11 +39,11 @@ create trigger on_auth_user_created
 create table public.posts (
   id               uuid primary key default gen_random_uuid(),
   household_id     uuid not null references public.profiles on delete cascade,
-  household_name   text not null,
-  household_phone  text not null,
+  household_name   text not null,   -- filled by trigger from profiles
+  household_phone  text not null,   -- filled by trigger from profiles
   photo_url        text not null default '',
   types            text[] not null check (cardinality(types) > 0),
-  amount           text not null,
+  weight_kg        numeric(5,1) not null check (weight_kg > 0 and weight_kg <= 500),
   -- Tagum City only (keep in sync with lib/constants.dart)
   lat              double precision not null check (lat between 7.33 and 7.58),
   lng              double precision not null check (lng between 125.68 and 125.93),
@@ -46,24 +51,49 @@ create table public.posts (
   label            text not null check (label in ('for_sale', 'free')),
   status           text not null default 'available'
                    check (status in ('available', 'reserved', 'collected')),
-  notes            text not null default '',
+  notes            text not null default '' check (length(notes) <= 300),
   reserved_by      uuid references public.profiles,
   reserved_by_name text,
   reserved_at      timestamptz,
   collected_at     timestamptz,
   rating           smallint check (rating between 1 and 5),
-  created_at       timestamptz not null default now()
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
 );
 
 create index posts_status_idx      on public.posts (status);
 create index posts_household_idx   on public.posts (household_id);
 create index posts_reserved_by_idx on public.posts (reserved_by);
 
+-- The app never sends name/phone; copy them from the poster's profile.
+create function public.fill_post_household() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  select name, phone into new.household_name, new.household_phone
+    from profiles where id = new.household_id;
+  return new;
+end $$;
+
+create trigger posts_fill_household
+  before insert on public.posts
+  for each row execute function public.fill_post_household();
+
+create function public.touch_updated_at() returns trigger
+language plpgsql as $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+
+create trigger posts_touch
+  before update on public.posts
+  for each row execute function public.touch_updated_at();
+
 -- ───────────────────────── routes ─────────────────────────
 create table public.routes (
   id             uuid primary key default gen_random_uuid(),
   collector_id   uuid not null references public.profiles on delete cascade,
-  collector_name text not null,
+  collector_name text not null,     -- filled by trigger from profiles
   start_time     timestamptz not null,
   barangays      text[] not null check (cardinality(barangays) > 0),
   note           text not null default '',
@@ -72,6 +102,17 @@ create table public.routes (
 
 create index routes_barangays_idx on public.routes using gin (barangays);
 create index routes_start_idx     on public.routes (start_time);
+
+create function public.fill_route_collector() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  select name into new.collector_name from profiles where id = new.collector_id;
+  return new;
+end $$;
+
+create trigger routes_fill_collector
+  before insert on public.routes
+  for each row execute function public.fill_route_collector();
 
 -- ───────────────────────── ratings view ─────────────────────────
 create view public.collector_ratings
@@ -89,6 +130,22 @@ language sql stable security definer set search_path = public as $$
   select role from public.profiles where id = auth.uid()
 $$;
 
+-- First sign-in: save the role picked on the login screen. Works only once.
+-- (The mobile number is asked later, before a household's first post.)
+create function public.complete_profile(p_role text)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_role not in ('household', 'collector') then
+    raise exception 'Please choose Household or Collector.';
+  end if;
+  update profiles set role = p_role
+   where id = auth.uid() and role is null;
+  if not found then
+    raise exception 'Your account is already set up.';
+  end if;
+end $$;
+
 -- ───────────────────────── row level security ─────────────────────────
 alter table public.profiles enable row level security;
 alter table public.posts    enable row level security;
@@ -98,8 +155,10 @@ create policy "profiles readable by signed-in users"
   on public.profiles for select to authenticated using (true);
 create policy "users update own profile"
   on public.profiles for update to authenticated
-  using (id = auth.uid())
-  with check (id = auth.uid() and role = public.my_role());
+  using (id = auth.uid()) with check (id = auth.uid());
+-- Role is set only through complete_profile(); users may edit the rest.
+revoke update on public.profiles from authenticated, anon;
+grant update (name, phone, followed_barangays) on public.profiles to authenticated;
 
 create policy "posts readable by signed-in users"
   on public.posts for select to authenticated using (true);
@@ -107,10 +166,18 @@ create policy "households create own available posts"
   on public.posts for insert to authenticated
   with check (household_id = auth.uid() and public.my_role() = 'household'
               and status = 'available' and reserved_by is null and rating is null);
+-- Owners may edit while no collector has reserved the post. Only the content
+-- columns are granted, so status/reservation/rating still go through the RPCs.
+create policy "households edit own available posts"
+  on public.posts for update to authenticated
+  using (household_id = auth.uid() and status = 'available')
+  with check (household_id = auth.uid() and status = 'available');
+revoke update on public.posts from authenticated, anon;
+grant update (photo_url, types, weight_kg, lat, lng, barangay, label, notes)
+  on public.posts to authenticated;
 create policy "households delete own available posts"
   on public.posts for delete to authenticated
   using (household_id = auth.uid() and status = 'available');
--- No direct UPDATE policy: status changes and ratings go through the RPCs below.
 
 create policy "routes readable by signed-in users"
   on public.routes for select to authenticated using (true);
@@ -128,7 +195,7 @@ create policy "collectors delete own routes"
 create function public.reserve_post(post_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if public.my_role() <> 'collector' then
+  if public.my_role() is distinct from 'collector' then
     raise exception 'Only collectors can reserve.';
   end if;
   update posts set status = 'reserved',
@@ -177,14 +244,19 @@ begin
 end $$;
 
 revoke execute on function public.reserve_post, public.cancel_reservation,
-  public.mark_collected, public.rate_collector from anon;
+  public.mark_collected, public.rate_collector, public.complete_profile
+  from anon, public;
+grant execute on function public.reserve_post, public.cancel_reservation,
+  public.mark_collected, public.rate_collector, public.complete_profile
+  to authenticated;
 
 -- ───────────────────────── realtime ─────────────────────────
 alter publication supabase_realtime add table public.posts, public.routes, public.profiles;
 
 -- ───────────────────────── storage ─────────────────────────
 -- Public bucket for post photos, path: post-photos/{user_id}/{file}.jpg
-insert into storage.buckets (id, name, public) values ('post-photos', 'post-photos', true);
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('post-photos', 'post-photos', true, 5242880, array['image/jpeg', 'image/png']);
 
 create policy "users upload own post photos"
   on storage.objects for insert to authenticated

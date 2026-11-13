@@ -7,7 +7,9 @@ import '../../models/app_user.dart';
 import '../../models/post.dart';
 import '../../data/repositories.dart';
 import '../../widgets/common.dart';
+import '../../theme.dart';
 import '../../widgets/tagum_map.dart';
+import '../household/create_post_screen.dart';
 
 void openPostDetail(BuildContext context, String postId) {
   final user = context.read<AppUser>();
@@ -35,7 +37,15 @@ Future<void> rateCollectorFlow(
   );
 }
 
-Future<void> _call(BuildContext context, String phone) async {
+Future<void> callPhone(BuildContext context, String phone) async {
+  if (phone.isEmpty) {
+    showMessage(
+      ScaffoldMessenger.of(context),
+      'This household has not added a mobile number.',
+      error: true,
+    );
+    return;
+  }
   final ok = await launchUrl(Uri(scheme: 'tel', path: phone));
   if (!ok && context.mounted) {
     showMessage(
@@ -46,7 +56,7 @@ Future<void> _call(BuildContext context, String phone) async {
   }
 }
 
-Future<void> _directions(RecyclablePost p) => launchUrl(
+Future<void> openDirections(RecyclablePost p) => launchUrl(
   Uri.parse(
     'https://www.google.com/maps/dir/?api=1&destination='
     '${p.location.latitude},${p.location.longitude}',
@@ -98,6 +108,10 @@ class PostDetailScreen extends StatelessWidget {
                         LabelPill(post.label),
                       ],
                     ),
+                    if (post.householdId == context.read<AppUser>().id) ...[
+                      const SizedBox(height: 16),
+                      StatusTracker(post.status),
+                    ],
                     const SizedBox(height: 12),
                     Text(
                       post.typesLabel,
@@ -107,7 +121,7 @@ class PostDetailScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _Info(Icons.scale, 'Amount', post.amount),
+                    _Info(Icons.scale, 'Weight', post.amount),
                     _Info(Icons.place, 'Barangay', post.barangay),
                     _Info(Icons.person, 'Household', post.householdName),
                     if (post.notes.isNotEmpty)
@@ -136,7 +150,7 @@ class PostDetailScreen extends StatelessWidget {
                               child: const Icon(
                                 Icons.location_pin,
                                 size: 50,
-                                color: Colors.red,
+                                color: Brand.danger,
                               ),
                             ),
                           ],
@@ -168,7 +182,7 @@ class _Info extends StatelessWidget {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 26, color: Colors.black54),
+        Icon(icon, size: 26, color: Brand.inkSoft),
         const SizedBox(width: 10),
         Expanded(
           child: Text.rich(
@@ -253,12 +267,12 @@ class _Actions extends StatelessWidget {
               label: const Text('Mark Collected'),
             ),
             OutlinedButton.icon(
-              onPressed: () => _call(context, post.householdPhone),
+              onPressed: () => callPhone(context, post.householdPhone),
               icon: const Icon(Icons.call),
               label: const Text('Call Household'),
             ),
             OutlinedButton.icon(
-              onPressed: () => _directions(post),
+              onPressed: () => openDirections(post),
               icon: const Icon(Icons.directions),
               label: const Text('Directions'),
             ),
@@ -306,11 +320,24 @@ class _Actions extends StatelessWidget {
     } else if (post.householdId == user.id) {
       switch (post.status) {
         case PostStatus.available:
-          children.add(
+          children.addAll([
+            FilledButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => Provider.value(
+                    value: user,
+                    child: CreatePostScreen(editing: post),
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Post'),
+            ),
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red.shade700,
-                side: BorderSide(color: Colors.red.shade700, width: 2),
+                foregroundColor: Brand.danger,
+                side: const BorderSide(color: Brand.danger, width: 1.8),
               ),
               onPressed: () async {
                 if (await confirm(
@@ -318,6 +345,7 @@ class _Actions extends StatelessWidget {
                       'Delete this post?',
                       'Collectors will no longer see it.',
                       yes: 'Delete',
+                      danger: true,
                     ) &&
                     context.mounted) {
                   final nav = Navigator.of(context);
@@ -333,7 +361,7 @@ class _Actions extends StatelessWidget {
               icon: const Icon(Icons.delete),
               label: const Text('Delete Post'),
             ),
-          );
+          ]);
         case PostStatus.reserved:
           children.add(
             const Text(
@@ -347,7 +375,8 @@ class _Actions extends StatelessWidget {
             children.add(
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.amber.shade800,
+                  backgroundColor: Brand.star,
+                  foregroundColor: Brand.ink,
                 ),
                 onPressed: () => rateCollectorFlow(context, post),
                 icon: const Icon(Icons.star),
@@ -359,7 +388,7 @@ class _Actions extends StatelessWidget {
               Text(
                 'You rated: ${'★' * post.rating!}',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, color: Colors.amber.shade800),
+                style: const TextStyle(fontSize: 22, color: Brand.star),
               ),
             );
           }

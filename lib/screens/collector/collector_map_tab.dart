@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +7,10 @@ import 'package:provider/provider.dart';
 import '../../constants.dart';
 import '../../models/app_user.dart';
 import '../../models/post.dart';
+import '../../models/route_schedule.dart';
+import '../../route_planner.dart';
+import '../../theme.dart';
+import '../../widgets/barangay_demand.dart';
 import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 import '../../widgets/tagum_map.dart';
@@ -23,6 +29,32 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
   late final Stream<List<RecyclablePost>> _posts = context
       .read<PostRepository>()
       .availablePosts();
+
+  /// Upcoming routes of all collectors, to show which barangays are covered.
+  List<RouteSchedule> _routes = const [];
+  StreamSubscription<List<RouteSchedule>>? _routesSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _routesSub = context
+        .read<RouteRepository>()
+        .routesFor(tagumBarangays)
+        .listen((r) {
+          if (mounted) setState(() => _routes = r);
+        }, onError: (_) {});
+  }
+
+  @override
+  void dispose() {
+    _routesSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _showBusy(List<BarangayDemand> ranking) async {
+    final picked = await showBusyBarangays(context, ranking);
+    if (picked != null) _map.move(picked.center, 15);
+  }
 
   /// Empty = show all types.
   final Set<RecyclableType> _types = {};
@@ -143,6 +175,7 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
             stream: _posts,
             builder: (context, snap) {
               final shown = (snap.data ?? []).where(_matches).toList();
+              final ranking = rankBarangays(snap.data ?? const [], _routes);
               return Stack(
                 children: [
                   TagumMap(
@@ -206,6 +239,19 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
                       ),
                     ),
                   ),
+                  if (ranking.isNotEmpty)
+                    Positioned(
+                      bottom: 16,
+                      left: 12,
+                      right: 130,
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: _BusyButton(
+                          top: ranking.first,
+                          onTap: () => _showBusy(ranking),
+                        ),
+                      ),
+                    ),
                   Positioned(
                     bottom: 16,
                     right: 16,
@@ -238,5 +284,71 @@ class _Legend extends StatelessWidget {
       Icon(Icons.location_pin, color: color, size: 22),
       Text(text, style: const TextStyle(fontSize: 15)),
     ],
+  );
+}
+
+/// "Busiest: Apokon · 5 posts" — opens the barangay ranking.
+class _BusyButton extends StatelessWidget {
+  const _BusyButton({required this.top, required this.onTap});
+  final BarangayDemand top;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Brand.card,
+    elevation: 4,
+    borderRadius: BorderRadius.circular(18),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Brand.kraft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.local_fire_department,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Busiest: ${top.barangay}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w900,
+                      color: Brand.ink,
+                    ),
+                  ),
+                  Text(
+                    '${demandSummary(top)} · see all',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: Brand.inkSoft,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
   );
 }

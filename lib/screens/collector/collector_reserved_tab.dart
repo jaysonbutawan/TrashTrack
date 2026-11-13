@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../../models/app_user.dart';
 import '../../models/post.dart';
 import '../../data/repositories.dart';
+import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../common/post_detail_screen.dart';
+import 'route_guide_screen.dart';
 
 class CollectorReservedTab extends StatefulWidget {
   const CollectorReservedTab({super.key, required this.user});
@@ -41,9 +43,10 @@ class _CollectorReservedTabState extends State<CollectorReservedTab> {
         }
         return ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: list.length,
+          itemCount: list.length + 1,
           itemBuilder: (context, i) {
-            final p = list[i];
+            if (i == 0) return _RouteGuideBanner(pickups: list);
+            final p = list[i - 1];
             return PostCard(
               post: p,
               onTap: () => openPostDetail(context, p.id),
@@ -70,6 +73,81 @@ class _CollectorReservedTabState extends State<CollectorReservedTab> {
           },
         );
       },
+    );
+  }
+}
+
+/// Opens the shortest route through all reserved pickups.
+class _RouteGuideBanner extends StatelessWidget {
+  const _RouteGuideBanner({required this.pickups});
+  final List<RecyclablePost> pickups;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = pickups.length;
+    final kg = pickups.fold(0.0, (a, p) => a + p.weightKg);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+      child: Material(
+        color: Brand.forest,
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            final user = context.read<AppUser>();
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => Provider.value(
+                  value: user,
+                  child: const RouteGuideScreen(),
+                ),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.route, color: Colors.white, size: 30),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Route Guide',
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        'Shortest way to your $n pickup${n == 1 ? '' : 's'} '
+                        '· ${formatKg(kg)}',
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward, color: Colors.white),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,24 +1,22 @@
-// In-memory implementation of the backend endpoints, seeded with static data.
-// Changes (reserve, post, rate…) live until the app restarts.
-//
-// Demo logins: household@demo.ph / collector@demo.ph, password "demo123".
+// TEST ONLY: in-memory implementation of the backend endpoints, seeded with
+// static data. The app itself always uses Supabase.
 
 import 'dart:async';
 
-import '../../constants.dart';
-import '../../models/app_user.dart';
-import '../../models/post.dart';
-import '../../models/route_schedule.dart';
-import '../repositories.dart';
+import 'package:hitchmeup/constants.dart';
+import 'package:hitchmeup/models/app_user.dart';
+import 'package:hitchmeup/models/post.dart';
+import 'package:hitchmeup/models/route_schedule.dart';
+import 'package:hitchmeup/data/repositories.dart';
+
 import 'mock_data.dart';
 
 const _latency = Duration(milliseconds: 400);
 
 /// Shared state behind all mock repositories.
 class MockStore {
-  final Map<String, AppUser> accounts = {...mockAccounts};
-  final Map<String, String> passwords = {
-    for (final email in mockAccounts.keys) email: demoPassword,
+  final Map<String, AppUser> accounts = {
+    for (final u in mockAccounts.values) u.id: u,
   };
   final List<RecyclablePost> posts = buildMockPosts();
   final List<RouteSchedule> routes = buildMockRoutes();
@@ -48,49 +46,68 @@ class MockStore {
   }
 }
 
-class MockAuthRepository implements AuthRepository {
+class MockAuthRepository extends AuthRepository {
   MockAuthRepository(this._s);
   final MockStore _s;
+
+  /// Who "Google" signs in as next: a sample user's id, or null for a
+  /// brand-new account.
+  String? nextGoogleAccount;
+
+  /// Test switch: the role is NOT saved during sign-in (as when the
+  /// connection drops half-way), leaving an account that needs [finishSignUp].
+  bool interruptSignUp = false;
 
   @override
   Stream<AppUser?> currentUser() => _s.watch(() => _s.currentUser);
 
-  @override
-  Future<void> signIn({required String email, required String password}) async {
-    await Future<void>.delayed(_latency);
-    final key = email.trim().toLowerCase();
-    if (_s.passwords[key] != password) {
-      throw BackendException('Wrong email or password.');
-    }
-    _s.currentUser = _s.accounts[key];
+  void _setUser(AppUser user) {
+    _s.accounts[user.id] = user;
+    _s.currentUser = user;
     _s.notify();
   }
 
+  /// Test helper: sign in directly as a sample user.
+  void signInAs(UserRole role) =>
+      _setUser(_s.accounts[mockAccounts[role]!.id]!);
+
   @override
-  Future<void> register({
-    required String email,
-    required String password,
-    required String name,
-    required String phone,
-    required UserRole role,
-  }) async {
+  Future<UserRole?> signInWithGoogle(UserRole role) async {
     await Future<void>.delayed(_latency);
-    final key = email.trim().toLowerCase();
-    if (_s.accounts.containsKey(key)) {
-      throw BackendException(
-        'This email already has an account. Please log in.',
-      );
+    final existing = nextGoogleAccount == null
+        ? null
+        : _s.accounts[nextGoogleAccount];
+    if (existing != null) {
+      _setUser(existing);
+      return existing.role;
     }
-    final user = AppUser(
-      id: _s.newId('u-'),
-      name: name.trim(),
-      phone: phone.trim(),
-      role: role,
+    _setUser(
+      AppUser(
+        id: _s.newId('u-'),
+        name: 'Juan Dela Paz',
+        phone: '',
+        role: role,
+        email: 'juan.delapaz@gmail.com',
+        needsProfile: interruptSignUp,
+      ),
     );
-    _s.accounts[key] = user;
-    _s.passwords[key] = password;
-    _s.currentUser = user;
-    _s.notify();
+    return null;
+  }
+
+  @override
+  Future<void> finishSignUp(UserRole role) async {
+    await Future<void>.delayed(_latency);
+    final user = _s.requireUser();
+    if (!user.needsProfile) {
+      throw BackendException('Your account is already set up.');
+    }
+    _setUser(user.copyWith(role: role, needsProfile: false));
+  }
+
+  @override
+  Future<void> updatePhone(String phone) async {
+    await Future<void>.delayed(_latency);
+    _setUser(_s.requireUser().copyWith(phone: phone.trim()));
   }
 
   @override
@@ -102,13 +119,7 @@ class MockAuthRepository implements AuthRepository {
   @override
   Future<void> setFollowedBarangays(List<String> barangays) async {
     await Future<void>.delayed(_latency);
-    final user = _s.requireUser().copyWith(followedBarangays: barangays);
-    final email = _s.accounts.entries
-        .firstWhere((e) => e.value.id == user.id)
-        .key;
-    _s.accounts[email] = user;
-    _s.currentUser = user;
-    _s.notify();
+    _setUser(_s.requireUser().copyWith(followedBarangays: barangays));
   }
 }
 
@@ -141,13 +152,21 @@ class MockPostRepository implements PostRepository {
     return i < 0 ? null : _s.posts[i];
   });
 
+  void _check(NewPost input) {
+    if (!isInsideTagum(input.location)) {
+      throw BackendException('The pin must be inside Tagum City.');
+    }
+    if (input.types.isEmpty) {
+      throw BackendException('Choose at least one type.');
+    }
+    if (input.weightKg <= 0) throw BackendException('Enter the weight.');
+  }
+
   @override
   Future<void> create(NewPost input) async {
     await Future<void>.delayed(_latency);
     final user = _s.requireUser();
-    if (!isInsideTagum(input.location)) {
-      throw BackendException('The pin must be inside Tagum City.');
-    }
+    _check(input);
     _s.posts.insert(
       0,
       RecyclablePost(
@@ -156,9 +175,9 @@ class MockPostRepository implements PostRepository {
         householdName: user.name,
         householdPhone: user.phone,
         // A real backend returns the uploaded URL; the mock keeps the local path.
-        photoUrl: input.photoPath,
+        photoUrl: input.photoPath ?? '',
         types: input.types,
-        amount: input.amount.trim(),
+        weightKg: input.weightKg,
         location: input.location,
         barangay: input.barangay,
         label: input.label,
@@ -166,6 +185,33 @@ class MockPostRepository implements PostRepository {
         notes: input.notes.trim(),
         createdAt: DateTime.now(),
       ),
+    );
+    _s.notify();
+  }
+
+  @override
+  Future<void> update(String postId, NewPost input) async {
+    await Future<void>.delayed(_latency);
+    final user = _s.requireUser();
+    _check(input);
+    final i = _s.indexOfPost(postId);
+    final p = _s.posts[i];
+    if (p.householdId != user.id) {
+      throw BackendException('You can only edit your own posts.');
+    }
+    if (p.status != PostStatus.available) {
+      throw BackendException(
+        'A collector already reserved this, so it can no longer be edited.',
+      );
+    }
+    _s.posts[i] = p.copyWith(
+      photoUrl: input.photoPath,
+      types: input.types,
+      weightKg: input.weightKg,
+      location: input.location,
+      barangay: input.barangay,
+      label: input.label,
+      notes: input.notes.trim(),
     );
     _s.notify();
   }
@@ -195,6 +241,7 @@ class MockPostRepository implements PostRepository {
       status: PostStatus.reserved,
       reservedBy: () => user.id,
       reservedByName: () => user.name,
+      reservedAt: () => DateTime.now(),
     );
     _s.notify();
   }
@@ -212,6 +259,7 @@ class MockPostRepository implements PostRepository {
       status: PostStatus.available,
       reservedBy: () => null,
       reservedByName: () => null,
+      reservedAt: () => null,
     );
     _s.notify();
   }
@@ -310,13 +358,4 @@ class MockRouteRepository implements RouteRepository {
     _s.routes.removeWhere((r) => r.id == routeId);
     _s.notify();
   }
-}
-
-class MockPushService implements PushService {
-  @override
-  Future<void> requestPermission() async {}
-  @override
-  Future<void> syncFollowedBarangays(List<String> barangays) async {}
-  @override
-  Future<void> clear() async {}
 }
