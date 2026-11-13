@@ -2,9 +2,11 @@
 // Tables, security rules and RPCs are defined in supabase/schema.sql.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/app_user.dart';
@@ -36,9 +38,33 @@ bool _isUpcoming(RouteSchedule r) {
 // ───────────────────────────── auth ─────────────────────────────
 
 class SupabaseAuthRepository extends AuthRepository {
-  SupabaseAuthRepository({required this.googleWebClientId});
+  SupabaseAuthRepository({required this.googleWebClientId, this.cache});
 
   final String googleWebClientId;
+
+  /// Phone storage for the last known profile, so a returning user opens
+  /// straight to their home screen while the fresh copy loads.
+  final SharedPreferences? cache;
+  static const _cacheKey = 'profile';
+
+  void _remember(Map<String, dynamic> row) {
+    _latestProfile = row;
+    cache?.setString(_cacheKey, jsonEncode(row));
+  }
+
+  Map<String, dynamic>? _cachedProfile(String id) {
+    try {
+      final row = jsonDecode(cache?.getString(_cacheKey) ?? 'null');
+      // Only a finished account of this same user is worth showing early.
+      if (row is Map<String, dynamic> &&
+          row['id'] == id &&
+          row['role'] != null) {
+        return row;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void>? _googleReady;
 
   GoTrueClient get _auth => _db.auth;
@@ -76,6 +102,13 @@ class SupabaseAuthRepository extends AuthRepository {
         out.add(null);
         return;
       }
+      if (_latestProfile == null && !_signingIn) {
+        final saved = _cachedProfile(id);
+        if (saved != null) {
+          _latestProfile = saved;
+          out.add(AppUser.fromMap(saved));
+        }
+      }
       profileSub = _db
           .from('profiles')
           .stream(primaryKey: ['id'])
@@ -88,7 +121,7 @@ class SupabaseAuthRepository extends AuthRepository {
             // A role is never removed, so a role-less row arriving after we
             // already know the role is just a slow, outdated response.
             if (row['role'] == null && _latestProfile?['role'] != null) return;
-            _latestProfile = row;
+            _remember(row);
             if (!_signingIn) out.add(AppUser.fromMap(row));
           }, onError: out.addError);
     }
@@ -176,7 +209,7 @@ class SupabaseAuthRepository extends AuthRepository {
         );
         row = {...row, 'role': role.name};
       }
-      _latestProfile = row;
+      _remember(row);
       if (existing == null) return null;
       return existing == 'collector' ? UserRole.collector : UserRole.household;
     } finally {
@@ -192,7 +225,7 @@ class SupabaseAuthRepository extends AuthRepository {
     );
     final row = _latestProfile;
     if (row != null) {
-      _latestProfile = {...row, 'role': role.name};
+      _remember({...row, 'role': role.name});
       _flush?.call();
     }
   }
@@ -226,6 +259,7 @@ class SupabaseAuthRepository extends AuthRepository {
     } catch (_) {
       // Google may not be initialized (e.g. session restored at start-up).
     }
+    await cache?.remove(_cacheKey);
     await _auth.signOut();
   }
 

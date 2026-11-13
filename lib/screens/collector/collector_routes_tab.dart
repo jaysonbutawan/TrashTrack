@@ -149,8 +149,8 @@ class _Note extends StatelessWidget {
   );
 }
 
-/// "Where should I go next?" — the busiest barangays, favouring the ones no
-/// collector has scheduled yet.
+/// "Where should I go next?" — busy barangays, favouring the ones no
+/// collector has scheduled yet (see [suggestBarangays]).
 class _Suggestions extends StatelessWidget {
   const _Suggestions({
     required this.available,
@@ -174,11 +174,7 @@ class _Suggestions extends StatelessWidget {
             routes.data ?? const [],
           );
           if (ranking.isEmpty) return const SizedBox.shrink();
-          // Unserved barangays first, each group still busiest-first.
-          final picks = [
-            ...ranking.where((d) => d.unserved),
-            ...ranking.where((d) => !d.unserved),
-          ].take(3).toList();
+          final picks = suggestBarangays(ranking);
           final names = [for (final d in picks) d.barangay];
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -186,7 +182,8 @@ class _Suggestions extends StatelessWidget {
               const _Heading('Suggested for your next route'),
               for (var i = 0; i < picks.length; i++)
                 DemandTile(
-                  rank: ranking.indexOf(picks[i]) + 1,
+                  rank: i + 1,
+                  hot: picks[i] == ranking.first,
                   demand: picks[i],
                   maxPosts: ranking.first.posts,
                   actionIcon: Icons.add_circle_outline,

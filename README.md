@@ -3,7 +3,7 @@
 Android app (Flutter) for Tagum City, Philippines, that connects households with bote-bakal (recyclable) collectors.
 
 - **Households** post recyclables with a photo, the types, an estimated weight in kg, a map pin and a For Sale / Free label. They can edit a post until a collector reserves it, search and filter their posts, see past pickups, follow barangays to get alerts about collector routes, and rate the collector after pickup.
-- **Collectors** see available posts on a map, filter them by type and by For Sale / Free, and reserve a post so other collectors can't take it. They mark posts as collected and schedule routes (date, time, barangays).
+- **Collectors** see available posts on a map, filter them by type and by For Sale / Free, and reserve a post so other collectors can't take it. The **Route Guide** puts their reserved pickups in the shortest order from where they are, with distance and time, and hands the trip to Google Maps. The app also shows which barangays have the most posts waiting and suggests where to schedule the next route. They mark posts as collected and schedule routes (date, time, barangays).
 
 The app doesn't handle payment. The price is agreed in person at pickup. Only places inside Tagum City are allowed for now.
 
@@ -60,6 +60,11 @@ The screens only use the interfaces in **`lib/data/repositories.dart`**. `lib/ma
 | `RouteRepository` | `routes` (realtime) |
 | `PushService` | not wired yet (FCM + Edge Function later) |
 
+## How the route suggestions work
+
+- **Route Guide** (`lib/route_planner.dart`): tries every visiting order for up to 8 pickups, and uses nearest-neighbour plus 2-opt for more. Distances are straight-line × 1.3 to approximate roads; time assumes about 18 km/h plus 6 minutes per stop. Turn-by-turn directions come from Google Maps, which the collector opens with one button.
+- **Busiest barangays**: counts the available posts and kilos per barangay. For "suggested for your next route", a barangay with no collector scheduled yet counts double.
+
 ## Project layout
 
 ```
@@ -67,12 +72,14 @@ lib/
   main.dart                 App start + backend wiring (mock ↔ Supabase)
   config.dart               Reads .env
   constants.dart            Barangays, recyclable types, Tagum map limits
+  route_planner.dart        Shortest pickup order + busiest-barangay ranking
   data/repositories.dart    Backend endpoints (interfaces)
   data/supabase/            Supabase implementation
   models/                   AppUser, RecyclablePost, RouteSchedule
   screens/auth/             Role + Google login, first-login role save
   screens/household/        My Posts, Create Post, Routes, Follow Barangays
-  screens/collector/        Map with filters, Reserved, Routes, Schedule Route
+  screens/collector/        Map with filters, Reserved, Route Guide, Routes,
+                            Schedule Route
   screens/common/           Post details and actions
   widgets/                  Shared UI (post card, type colors, kg stepper,
                             barangay picker, route tile, map)

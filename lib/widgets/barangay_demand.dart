@@ -18,6 +18,7 @@ class DemandTile extends StatelessWidget {
     required this.maxPosts,
     this.onTap,
     this.actionIcon = Icons.chevron_right,
+    this.hot,
   });
 
   final int rank;
@@ -28,10 +29,13 @@ class DemandTile extends StatelessWidget {
   final VoidCallback? onTap;
   final IconData actionIcon;
 
+  /// Mark as the busiest barangay (fire icon). Defaults to rank 1.
+  final bool? hot;
+
   @override
   Widget build(BuildContext context) {
     final d = demand;
-    final top = rank == 1;
+    final top = hot ?? rank == 1;
     final next = d.nextRoute;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),

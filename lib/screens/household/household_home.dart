@@ -10,12 +10,11 @@ import '../../models/post.dart';
 import '../../models/route_schedule.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/post_form_widgets.dart';
 import '../../widgets/recyclable_style.dart';
-import '../../widgets/route_tile.dart';
 import '../common/post_detail_screen.dart';
 import '../common/profile_tab.dart';
 import 'create_post_screen.dart';
-import 'follow_barangays_screen.dart';
 
 void openPostForm(BuildContext context, {RecyclablePost? editing}) {
   final user = context.read<AppUser>();
@@ -26,17 +25,6 @@ void openPostForm(BuildContext context, {RecyclablePost? editing}) {
         value: user,
         child: CreatePostScreen(editing: editing),
       ),
-    ),
-  );
-}
-
-void _openFollow(BuildContext context) {
-  final user = context.read<AppUser>();
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) =>
-          Provider.value(value: user, child: const FollowBarangaysScreen()),
     ),
   );
 }
@@ -1126,6 +1114,9 @@ class _FilterSheetState extends State<_FilterSheet> {
 
 // ───────────────────────────── Routes ─────────────────────────────
 
+/// Riders coming to the household's barangays. The home barangay (from the
+/// Profile tab) is always included, so it never has to be picked again;
+/// "Add barangay" offers only the ones not added yet.
 class _Routes extends StatefulWidget {
   const _Routes({required this.user});
   final AppUser user;
@@ -1135,125 +1126,462 @@ class _Routes extends StatefulWidget {
 }
 
 class _RoutesState extends State<_Routes> {
-  late List<String> _followed = widget.user.followedBarangays;
+  late List<String> _watched = _watchList(widget.user);
   late Stream<List<RouteSchedule>> _routes = _load();
 
+  /// Home barangay first, then the others in the order they were added.
+  static List<String> _watchList(AppUser u) => [
+    if (u.barangay.isNotEmpty) u.barangay,
+    ...u.followedBarangays.where((b) => b != u.barangay),
+  ];
+
   Stream<List<RouteSchedule>> _load() =>
-      context.read<RouteRepository>().routesFor(_followed);
+      context.read<RouteRepository>().routesFor(_watched);
 
   @override
   void didUpdateWidget(_Routes old) {
     super.didUpdateWidget(old);
-    final now = widget.user.followedBarangays;
-    if (now.join('|') != _followed.join('|')) {
-      _followed = now;
+    final now = _watchList(widget.user);
+    if (now.join('|') != _watched.join('|')) {
+      _watched = now;
       _routes = _load();
     }
   }
 
+  Future<void> _saveFollowed(List<String> followed, String message) async {
+    final auth = context.read<AuthRepository>();
+    final push = context.read<PushService>();
+    final ordered = tagumBarangays.where(followed.contains).toList();
+    await runWithFeedback(context, () async {
+      await auth.setFollowedBarangays(ordered);
+      await push.syncFollowedBarangays(ordered);
+    }, successMessage: message);
+  }
+
+  Future<void> _add() async {
+    final picked = await pickBarangay(
+      context,
+      title: 'Add a barangay',
+      alreadyAdded: _watched.toSet(),
+    );
+    if (picked == null || !mounted || _watched.contains(picked)) return;
+    await _saveFollowed([
+      ...widget.user.followedBarangays,
+      picked,
+    ], 'Added $picked. You will see its riders here.');
+  }
+
+  Future<void> _remove(String b) async {
+    if (!await confirm(
+          context,
+          'Remove $b?',
+          'You will stop seeing riders and alerts for $b.',
+          yes: 'Remove',
+        ) ||
+        !mounted) {
+      return;
+    }
+    await _saveFollowed(
+      widget.user.followedBarangays.where((x) => x != b).toList(),
+      'Removed $b.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final home = widget.user.barangay;
     return Scaffold(
-      appBar: AppBar(title: const Text('Collector Routes')),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Brand.kraftLight,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Brand.kraft.withValues(alpha: 0.35)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.notifications_active, color: Brand.kraft),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _followed.isEmpty
-                            ? 'Get an alert when a collector is coming'
-                            : 'Alerts on for',
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _openFollow(context),
-                      child: Text(_followed.isEmpty ? 'Set up' : 'Change'),
-                    ),
-                  ],
-                ),
-                if (_followed.isNotEmpty)
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final b in _followed)
-                        Chip(
-                          visualDensity: VisualDensity.compact,
-                          avatar: const Icon(
-                            Icons.star_rounded,
-                            size: 18,
-                            color: Brand.star,
-                          ),
-                          label: Text(b),
-                        ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<RouteSchedule>>(
+      appBar: AppBar(title: const Text('Riders Coming')),
+      body: _watched.isEmpty
+          ? EmptyMessage(
+              Icons.add_location_alt,
+              'Add your barangay to see which riders are coming and when.',
+              action: FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size(220, 54)),
+                onPressed: _add,
+                icon: const Icon(Icons.add),
+                label: const Text('Add My Barangay'),
+              ),
+            )
+          : StreamBuilder<List<RouteSchedule>>(
               stream: _routes,
               builder: (context, snap) {
-                if (snap.hasError) {
-                  return const EmptyMessage(
-                    Icons.wifi_off,
-                    'Could not load routes.',
-                  );
-                }
-                if (!snap.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final list = snap.data!;
-                if (list.isEmpty) {
-                  return _followed.isEmpty
-                      ? EmptyMessage(
-                          Icons.add_location_alt,
-                          'Follow your barangay to see when collectors pass by.',
-                          action: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size(220, 54),
-                            ),
-                            onPressed: () => _openFollow(context),
-                            icon: const Icon(Icons.notifications_active),
-                            label: const Text('Follow My Barangay'),
-                          ),
-                        )
-                      : const EmptyMessage(
-                          Icons.event_busy,
-                          'No collector routes scheduled yet.',
-                        );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  itemCount: list.length,
-                  itemBuilder: (context, i) =>
-                      RouteTile(route: list[i], highlight: _followed),
+                final routes = snap.data ?? const <RouteSchedule>[];
+                return ListView(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: [
+                    _WatchBar(
+                      watched: _watched,
+                      home: home,
+                      onAdd: _add,
+                      onRemove: _remove,
+                    ),
+                    if (snap.hasError)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: EmptyMessage(
+                          Icons.wifi_off,
+                          'Could not load routes.',
+                        ),
+                      )
+                    else if (!snap.hasData)
+                      const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else
+                      for (final b in _watched)
+                        _BarangayRiders(
+                          barangay: b,
+                          isHome: b == home,
+                          routes: routes
+                              .where((r) => r.barangays.contains(b))
+                              .toList(),
+                        ),
+                  ],
                 );
               },
             ),
+    );
+  }
+}
+
+/// Chips of the barangays being watched, plus "Add barangay".
+class _WatchBar extends StatelessWidget {
+  const _WatchBar({
+    required this.watched,
+    required this.home,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final List<String> watched;
+  final String home;
+  final VoidCallback onAdd;
+  final ValueChanged<String> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final left = tagumBarangays.length - watched.length;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Brand.kraftLight,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Brand.kraft.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.notifications_active, color: Brand.kraft, size: 22),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Your barangays',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final b in watched)
+                b == home
+                    ? Chip(
+                        avatar: const Icon(
+                          Icons.home_rounded,
+                          size: 18,
+                          color: Brand.forest,
+                        ),
+                        label: Text(b),
+                        backgroundColor: Brand.mint,
+                        side: const BorderSide(color: Brand.forest),
+                      )
+                    : InputChip(
+                        avatar: const Icon(
+                          Icons.star_rounded,
+                          size: 18,
+                          color: Brand.star,
+                        ),
+                        label: Text(b),
+                        deleteButtonTooltipMessage: 'Remove',
+                        onDeleted: () => onRemove(b),
+                      ),
+              if (left > 0)
+                ActionChip(
+                  avatar: const Icon(Icons.add, size: 18, color: Brand.forest),
+                  label: const Text('Add barangay'),
+                  labelStyle: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Brand.forest,
+                  ),
+                  side: const BorderSide(color: Brand.forest, width: 1.5),
+                  onPressed: onAdd,
+                ),
+            ],
+          ),
+          if (home.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Your home barangay is added automatically. Change it on the '
+              'Profile tab.',
+              style: TextStyle(fontSize: 13.5, color: Brand.inkSoft),
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+/// One barangay and the riders scheduled to pass there.
+class _BarangayRiders extends StatelessWidget {
+  const _BarangayRiders({
+    required this.barangay,
+    required this.isHome,
+    required this.routes,
+  });
+
+  final String barangay;
+  final bool isHome;
+  final List<RouteSchedule> routes;
+
+  @override
+  Widget build(BuildContext context) {
+    final riders = routes.map((r) => r.collectorId).toSet().length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+          child: Row(
+            children: [
+              Icon(
+                isHome ? Icons.home_rounded : Icons.location_on,
+                size: 20,
+                color: isHome ? Brand.forest : Brand.inkSoft,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  barangay,
+                  style: const TextStyle(
+                    fontSize: 18.5,
+                    fontWeight: FontWeight.w900,
+                    color: Brand.ink,
+                  ),
+                ),
+              ),
+              Text(
+                routes.isEmpty
+                    ? 'No riders yet'
+                    : '$riders rider${riders == 1 ? '' : 's'}',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: routes.isEmpty ? Brand.inkSoft : Brand.forest,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (routes.isEmpty)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Brand.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Brand.line),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.event_busy, color: Brand.inkSoft),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'No rider has scheduled this barangay yet. You will get '
+                    'an alert when one does.',
+                    style: TextStyle(fontSize: 15, color: Brand.inkSoft),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          for (final r in routes) _RiderCard(route: r, barangay: barangay),
+      ],
+    );
+  }
+}
+
+class _RiderCard extends StatelessWidget {
+  const _RiderCard({required this.route, required this.barangay});
+  final RouteSchedule route;
+  final String barangay;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = route;
+    final t = r.startTime;
+    final now = DateTime.now();
+    final days = DateTime(
+      t.year,
+      t.month,
+      t.day,
+    ).difference(DateTime(now.year, now.month, now.day)).inDays;
+    final day = switch (days) {
+      0 => 'Today',
+      1 => 'Tomorrow',
+      _ => DateFormat('EEE, MMM d').format(t),
+    };
+    final soon = days <= 1;
+    final others = r.barangays.where((b) => b != barangay).toList();
+    final initials = r.collectorName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((s) => s.isNotEmpty)
+        .take(2)
+        .map((s) => s[0].toUpperCase())
+        .join();
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: soon ? Brand.forest : Brand.mint,
+              child: Text(
+                initials,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: soon ? Colors.white : Brand.forest,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          r.collectorName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 17.5,
+                            fontWeight: FontWeight.w800,
+                            color: Brand.ink,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _RiderRating(collectorId: r.collectorId),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.schedule,
+                        size: 17,
+                        color: soon ? Brand.kraft : Brand.inkSoft,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '$day · ${DateFormat('h:mm a').format(t)}',
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w800,
+                            color: soon ? Brand.kraft : Brand.ink,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (others.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        'Also passing ${others.join(', ')}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Brand.inkSoft,
+                        ),
+                      ),
+                    ),
+                  if (r.note.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        '“${r.note}”',
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontStyle: FontStyle.italic,
+                          color: Brand.ink,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "★ 4.8" next to a rider's name; nothing until they have ratings.
+class _RiderRating extends StatefulWidget {
+  const _RiderRating({required this.collectorId});
+  final String collectorId;
+
+  @override
+  State<_RiderRating> createState() => _RiderRatingState();
+}
+
+class _RiderRatingState extends State<_RiderRating> {
+  late final Stream<CollectorRating> _rating = context
+      .read<PostRepository>()
+      .collectorRating(widget.collectorId);
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<CollectorRating>(
+    stream: _rating,
+    builder: (context, snap) {
+      final avg = snap.data?.average;
+      if (avg == null) return const SizedBox.shrink();
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rounded, size: 18, color: Brand.star),
+          Text(
+            avg.toStringAsFixed(1),
+            style: const TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w800,
+              color: Brand.ink,
+            ),
+          ),
+        ],
+      );
+    },
+  );
 }

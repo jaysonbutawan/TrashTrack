@@ -352,6 +352,8 @@ Future<String?> pickBarangay(
   BuildContext context, {
   String? selected,
   List<String> followed = const [],
+  Set<String> alreadyAdded = const {},
+  String title = 'Which barangay?',
 }) {
   return showModalBottomSheet<String>(
     context: context,
@@ -364,6 +366,8 @@ Future<String?> pickBarangay(
         scroll: scroll,
         selected: selected,
         followed: followed,
+        alreadyAdded: alreadyAdded,
+        title: title,
       ),
     ),
   );
@@ -374,10 +378,16 @@ class _BarangaySheet extends StatefulWidget {
     required this.scroll,
     required this.selected,
     required this.followed,
+    this.alreadyAdded = const {},
+    this.title = 'Which barangay?',
   });
   final ScrollController scroll;
   final String? selected;
   final List<String> followed;
+
+  /// Shown greyed out with "Added" and cannot be picked again.
+  final Set<String> alreadyAdded;
+  final String title;
 
   @override
   State<_BarangaySheet> createState() => _BarangaySheetState();
@@ -388,6 +398,25 @@ class _BarangaySheetState extends State<_BarangaySheet> {
 
   Widget _tile(String b, {bool star = false}) {
     final sel = b == widget.selected;
+    if (widget.alreadyAdded.contains(b)) {
+      return ListTile(
+        minTileHeight: 58,
+        enabled: false,
+        leading: const Icon(Icons.check_circle, color: Brand.leaf),
+        title: Text(
+          b,
+          style: const TextStyle(fontSize: 19, color: Brand.inkSoft),
+        ),
+        trailing: const Text(
+          'Added',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: Brand.leaf,
+          ),
+        ),
+      );
+    }
     return ListTile(
       minTileHeight: 58,
       leading: Icon(
@@ -426,15 +455,22 @@ class _BarangaySheetState extends State<_BarangaySheet> {
   @override
   Widget build(BuildContext context) {
     final q = _q.trim().toLowerCase();
+    final added = widget.alreadyAdded;
+    // Already-added barangays are listed once, on top, and left out below.
     final all = tagumBarangays
-        .where((b) => b.toLowerCase().contains(q))
+        .where((b) => b.toLowerCase().contains(q) && !added.contains(b))
         .toList();
-    final mine = q.isEmpty ? widget.followed : const <String>[];
+    final mine = q.isEmpty
+        ? widget.followed.where((b) => !added.contains(b)).toList()
+        : const <String>[];
+    final done = q.isEmpty
+        ? tagumBarangays.where(added.contains).toList()
+        : const <String>[];
     return Column(
       children: [
-        const Text(
-          'Which barangay?',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+        Text(
+          widget.title,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -455,6 +491,11 @@ class _BarangaySheetState extends State<_BarangaySheet> {
               bottom: MediaQuery.of(context).viewInsets.bottom + 16,
             ),
             children: [
+              if (done.isNotEmpty) ...[
+                _heading('Already added'),
+                for (final b in done) _tile(b),
+                _heading('Add another'),
+              ],
               if (mine.isNotEmpty) ...[
                 _heading('Your barangays'),
                 for (final b in mine) _tile(b, star: true),
@@ -462,12 +503,14 @@ class _BarangaySheetState extends State<_BarangaySheet> {
               ],
               for (final b in all) _tile(b),
               if (all.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(24),
+                Padding(
+                  padding: const EdgeInsets.all(24),
                   child: Text(
-                    'No barangay matches that name.',
+                    q.isEmpty
+                        ? 'You already added every barangay.'
+                        : 'No barangay matches that name.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 17, color: Brand.inkSoft),
+                    style: const TextStyle(fontSize: 17, color: Brand.inkSoft),
                   ),
                 ),
             ],

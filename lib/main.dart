@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
@@ -28,6 +29,7 @@ Future<void> main() async {
     url: config.supabaseUrl,
     publishableKey: config.supabaseKey,
   );
+  final prefs = await SharedPreferences.getInstance();
 
   runApp(
     MultiProvider(
@@ -35,6 +37,7 @@ Future<void> main() async {
         Provider<AuthRepository>.value(
           value: SupabaseAuthRepository(
             googleWebClientId: config.googleWebClientId,
+            cache: prefs,
           ),
         ),
         Provider<PostRepository>.value(value: SupabasePostRepository()),

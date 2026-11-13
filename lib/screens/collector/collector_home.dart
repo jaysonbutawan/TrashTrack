@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/app_user.dart';
 import '../../models/post.dart';
 import '../../data/repositories.dart';
+import '../../theme.dart';
 import '../common/profile_tab.dart';
 import 'collector_map_tab.dart';
 import 'collector_reserved_tab.dart';
@@ -40,13 +41,21 @@ class _CollectorHomeState extends State<CollectorHome> {
             builder: (context, snap) {
               final avg = snap.data?.average;
               if (avg == null) return const SizedBox.shrink();
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Text(
-                    '★ ${avg.toStringAsFixed(1)}',
-                    style: const TextStyle(fontSize: 18),
-                  ),
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.star_rounded, color: Brand.star, size: 24),
+                    const SizedBox(width: 2),
+                    Text(
+                      avg.toStringAsFixed(1),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
               );
             },

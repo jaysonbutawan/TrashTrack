@@ -49,6 +49,7 @@ class _CollectorReservedTabState extends State<CollectorReservedTab> {
             final p = list[i - 1];
             return PostCard(
               post: p,
+              showStatus: false, // everything on this tab is reserved
               onTap: () => openPostDetail(context, p.id),
               trailing: FilledButton.icon(
                 style: FilledButton.styleFrom(minimumSize: const Size(0, 50)),

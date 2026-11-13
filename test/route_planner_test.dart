@@ -46,11 +46,9 @@ void main() {
     expect(route.totalMinutes, greaterThan(3 * minutesPerStop));
   });
 
-  test('the nearest stop is not always first', () {
-    // One stop just west, the rest in a line to the east. Going west first
-    // and coming back is longer than leaving the west stop for... actually
-    // shorter overall is west first (tiny detour) — the planner must match
-    // brute force either way.
+  test('a small detour first beats doubling back later', () {
+    // One stop just west of the start, three in a line to the east. Going
+    // east first would mean coming all the way back for the west one.
     final stops = [
       post('w', 7.40, 125.795),
       post('e1', 7.40, 125.81),
@@ -134,6 +132,15 @@ void main() {
     expect(apokon.center.latitude, closeTo(7.465, 1e-9));
     expect(ranking[1].unserved, isFalse);
     expect(ranking[1].nextRoute!.collectorName, 'Jun');
+
+    // Suggestions: an unserved barangay counts double.
+    // Apokon 2 posts unserved (4) > Visayan 1 unserved (2) > Mankilam 1 served (1).
+    expect(suggestBarangays(ranking).map((d) => d.barangay), [
+      'Apokon',
+      'Visayan Village',
+      'Mankilam',
+    ]);
+    expect(suggestBarangays(ranking, count: 1).single.barangay, 'Apokon');
   });
 
   test('formatting', () {

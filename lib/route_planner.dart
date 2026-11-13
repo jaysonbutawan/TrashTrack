@@ -215,3 +215,18 @@ List<BarangayDemand> rankBarangays(
   });
   return list;
 }
+
+/// Best barangays for a collector's next route: busy ones, with a barangay
+/// nobody has scheduled yet counting double (same supply, no competition).
+List<BarangayDemand> suggestBarangays(
+  List<BarangayDemand> ranking, {
+  int count = 3,
+}) {
+  int score(BarangayDemand d) => d.posts * (d.unserved ? 2 : 1);
+  final list = [...ranking]
+    ..sort((a, b) {
+      final byScore = score(b).compareTo(score(a));
+      return byScore != 0 ? byScore : b.totalKg.compareTo(a.totalKg);
+    });
+  return list.take(count).toList();
+}

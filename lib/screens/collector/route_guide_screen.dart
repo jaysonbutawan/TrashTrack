@@ -54,7 +54,10 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
     LatLng? loc;
     String? problem;
     try {
-      (loc, problem) = await widget.locate();
+      // GPS can take very long indoors; don't keep the collector waiting.
+      (loc, problem) = await widget.locate().timeout(
+        const Duration(seconds: 12),
+      );
       if (loc != null && !isInsideTagum(loc)) {
         loc = null;
         problem = 'You are outside Tagum City.';
@@ -64,8 +67,9 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
     }
     if (!mounted) return;
     setState(() {
-      _me = loc;
-      _locationProblem = problem;
+      // Keep the last known position if this attempt failed.
+      _me = loc ?? _me;
+      _locationProblem = loc == null ? problem : null;
       _locating = false;
     });
   }
@@ -153,7 +157,7 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
           if (snap.hasError) {
             return const EmptyMessage(Icons.wifi_off, 'Could not load.');
           }
-          if (!snap.hasData || (_locating && _me == null)) {
+          if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           final reserved = snap.data!;
@@ -163,14 +167,17 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
               'No pickups to plan.\nReserve posts on the Map first.',
             );
           }
-          // Without GPS the route starts from the city center.
+          // The route shows right away and is redrawn when GPS answers;
+          // until then (or without GPS) it starts from the city center.
           final route = planRoute(_me ?? tagumCenter, reserved);
           _frame(route);
           return Column(
             children: [
               SizedBox(height: 250, child: _RouteMap(_map, route, _me)),
               _Summary(route: route),
-              if (_locationProblem != null)
+              if (_me == null && _locating)
+                const _LocationNotice('Finding your location…')
+              else if (_me == null && _locationProblem != null)
                 _LocationNotice(_locationProblem!, onRetry: _locate),
               Expanded(
                 child: ListView.builder(
@@ -327,9 +334,11 @@ class _Summary extends StatelessWidget {
 }
 
 class _LocationNotice extends StatelessWidget {
-  const _LocationNotice(this.problem, {required this.onRetry});
+  const _LocationNotice(this.problem, {this.onRetry});
   final String problem;
-  final VoidCallback onRetry;
+
+  /// Null while still searching (shows a small spinner instead).
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -345,7 +354,17 @@ class _LocationNotice extends StatelessWidget {
             style: const TextStyle(fontSize: 14.5, color: Brand.ink),
           ),
         ),
-        TextButton(onPressed: onRetry, child: const Text('Retry')),
+        if (onRetry != null)
+          TextButton(onPressed: onRetry, child: const Text('Retry'))
+        else
+          const Padding(
+            padding: EdgeInsets.all(14),
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+          ),
       ],
     ),
   );
