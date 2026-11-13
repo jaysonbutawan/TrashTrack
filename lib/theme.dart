@@ -6,7 +6,11 @@ ThemeData buildTheme() {
   final scheme = ColorScheme.fromSeed(seedColor: green, primary: green);
   final base = ThemeData(colorScheme: scheme, useMaterial3: true);
 
-  final bigText = base.textTheme.apply(fontSizeFactor: 1.15);
+  // base.textTheme has no font sizes yet (Flutter adds them later), so merge
+  // in the default sizes before scaling — otherwise apply() asserts.
+  final bigText = base.typography.englishLike
+      .merge(base.textTheme)
+      .apply(fontSizeFactor: 1.15);
   const buttonText = TextStyle(fontSize: 20, fontWeight: FontWeight.bold);
   const buttonSize = Size.fromHeight(60);
   final buttonShape = RoundedRectangleBorder(
