@@ -206,6 +206,20 @@ class SupabaseAuthRepository extends AuthRepository {
   );
 
   @override
+  Future<void> updateProfile({String? name, String? phone, String? barangay}) {
+    final changes = {
+      if (name != null) 'name': name.trim(),
+      if (phone != null) 'phone': phone.trim(),
+      'barangay': ?barangay,
+    };
+    if (changes.isEmpty) return Future.value();
+    return _guard(
+      () =>
+          _db.from('profiles').update(changes).eq('id', _auth.currentUser!.id),
+    );
+  }
+
+  @override
   Future<void> signOut() async {
     try {
       await GoogleSignIn.instance.signOut();

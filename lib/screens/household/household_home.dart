@@ -13,6 +13,7 @@ import '../../widgets/common.dart';
 import '../../widgets/recyclable_style.dart';
 import '../../widgets/route_tile.dart';
 import '../common/post_detail_screen.dart';
+import '../common/profile_tab.dart';
 import 'create_post_screen.dart';
 import 'follow_barangays_screen.dart';
 
@@ -68,8 +69,9 @@ class _HouseholdHomeState extends State<HouseholdHome> {
       body: IndexedStack(
         index: _tab,
         children: [
-          _MyPosts(user: user),
+          _MyPosts(user: user, onProfile: () => setState(() => _tab = 2)),
           _Routes(user: user),
+          ProfileTab(user: user),
         ],
       ),
       floatingActionButton: _tab == 0
@@ -107,25 +109,15 @@ class _HouseholdHomeState extends State<HouseholdHome> {
             ),
             label: 'Routes',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline, size: 28),
+            selectedIcon: Icon(Icons.person, size: 28, color: Brand.forest),
+            label: 'Profile',
+          ),
         ],
       ),
     );
   }
-}
-
-Future<void> _logout(BuildContext context) async {
-  if (!await confirm(
-    context,
-    'Log out?',
-    'You will stop getting route alerts on this phone.',
-    yes: 'Log Out',
-  )) {
-    return;
-  }
-  if (!context.mounted) return;
-  final auth = context.read<AuthRepository>();
-  await context.read<PushService>().clear();
-  await auth.signOut();
 }
 
 // ───────────────────────────── My Posts ─────────────────────────────
@@ -177,8 +169,9 @@ class _Filters {
 }
 
 class _MyPosts extends StatefulWidget {
-  const _MyPosts({required this.user});
+  const _MyPosts({required this.user, required this.onProfile});
   final AppUser user;
+  final VoidCallback onProfile;
 
   @override
   State<_MyPosts> createState() => _MyPostsState();
@@ -271,6 +264,7 @@ class _MyPostsState extends State<_MyPosts> {
                     SliverToBoxAdapter(
                       child: _Header(
                         user: widget.user,
+                        onProfile: widget.onProfile,
                         active: active,
                         past: past,
                       ),
@@ -420,8 +414,14 @@ class _MyPostsState extends State<_MyPosts> {
 // ── header ──
 
 class _Header extends StatelessWidget {
-  const _Header({required this.user, required this.active, required this.past});
+  const _Header({
+    required this.user,
+    required this.onProfile,
+    required this.active,
+    required this.past,
+  });
   final AppUser user;
+  final VoidCallback onProfile;
   final List<RecyclablePost> active;
   final List<RecyclablePost> past;
 
@@ -464,7 +464,10 @@ class _Header extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _Avatar(user: user),
+                    GestureDetector(
+                      onTap: onProfile,
+                      child: _Avatar(user: user),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -490,29 +493,12 @@ class _Header extends StatelessWidget {
                         ],
                       ),
                     ),
-                    PopupMenuButton<String>(
-                      iconColor: Colors.white,
+                    IconButton(
+                      tooltip: 'My profile',
                       iconSize: 28,
-                      tooltip: 'Menu',
-                      onSelected: (v) => v == 'follow'
-                          ? _openFollow(context)
-                          : _logout(context),
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
-                          value: 'follow',
-                          child: ListTile(
-                            leading: Icon(Icons.notifications_active),
-                            title: Text('My barangays'),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 'logout',
-                          child: ListTile(
-                            leading: Icon(Icons.logout),
-                            title: Text('Log out'),
-                          ),
-                        ),
-                      ],
+                      color: Colors.white,
+                      onPressed: onProfile,
+                      icon: const Icon(Icons.manage_accounts),
                     ),
                   ],
                 ),

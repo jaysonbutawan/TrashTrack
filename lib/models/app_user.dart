@@ -9,6 +9,7 @@ class AppUser {
     required this.role,
     this.email = '',
     this.avatarUrl = '',
+    this.barangay = '',
     this.followedBarangays = const [],
     this.needsProfile = false,
   });
@@ -21,6 +22,9 @@ class AppUser {
 
   /// Google profile picture; empty shows initials.
   final String avatarUrl;
+
+  /// Barangay the household lives in (set on the Profile tab); empty = not set.
+  final String barangay;
   final List<String> followedBarangays;
 
   /// True right after the first Google sign-in, until the user picks
@@ -40,6 +44,7 @@ class AppUser {
     String? name,
     String? phone,
     UserRole? role,
+    String? barangay,
     List<String>? followedBarangays,
     bool? needsProfile,
   }) => AppUser(
@@ -49,6 +54,7 @@ class AppUser {
     role: role ?? this.role,
     email: email,
     avatarUrl: avatarUrl,
+    barangay: barangay ?? this.barangay,
     followedBarangays: followedBarangays ?? this.followedBarangays,
     needsProfile: needsProfile ?? this.needsProfile,
   );
@@ -60,6 +66,7 @@ class AppUser {
     role: m['role'] == 'collector' ? UserRole.collector : UserRole.household,
     email: m['email'] as String? ?? '',
     avatarUrl: m['avatar_url'] as String? ?? '',
+    barangay: m['barangay'] as String? ?? '',
     followedBarangays: List<String>.from(
       m['followed_barangays'] as List? ?? const [],
     ),

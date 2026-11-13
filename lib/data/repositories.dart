@@ -41,6 +41,10 @@ abstract class AuthRepository {
   /// Supabase: `update profiles set phone = ...` (asked before the first post).
   Future<void> updatePhone(String phone);
 
+  /// Profile tab edits. Only the fields given are changed.
+  /// Supabase: `update profiles set name/phone/barangay = ... where id = auth.uid()`.
+  Future<void> updateProfile({String? name, String? phone, String? barangay});
+
   /// Supabase: `auth.signOut` (and Google sign-out).
   Future<void> signOut();
 

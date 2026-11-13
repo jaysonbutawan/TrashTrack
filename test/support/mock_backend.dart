@@ -111,6 +111,25 @@ class MockAuthRepository extends AuthRepository {
   }
 
   @override
+  Future<void> updateProfile({
+    String? name,
+    String? phone,
+    String? barangay,
+  }) async {
+    await Future<void>.delayed(_latency);
+    if (name != null && name.trim().isEmpty) {
+      throw BackendException('Please enter your name.');
+    }
+    _setUser(
+      _s.requireUser().copyWith(
+        name: name?.trim(),
+        phone: phone?.trim(),
+        barangay: barangay,
+      ),
+    );
+  }
+
+  @override
   Future<void> signOut() async {
     _s.currentUser = null;
     _s.notify();

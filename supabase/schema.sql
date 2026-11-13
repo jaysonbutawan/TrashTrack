@@ -13,6 +13,7 @@ create table public.profiles (
   email              text not null default '',
   avatar_url         text not null default '',
   role               text check (role in ('household', 'collector')),
+  barangay           text not null default '',   -- household's home barangay
   followed_barangays text[] not null default '{}',
   created_at         timestamptz not null default now()
 );
@@ -158,7 +159,7 @@ create policy "users update own profile"
   using (id = auth.uid()) with check (id = auth.uid());
 -- Role is set only through complete_profile(); users may edit the rest.
 revoke update on public.profiles from authenticated, anon;
-grant update (name, phone, followed_barangays) on public.profiles to authenticated;
+grant update (name, phone, barangay, followed_barangays) on public.profiles to authenticated;
 
 create policy "posts readable by signed-in users"
   on public.posts for select to authenticated using (true);

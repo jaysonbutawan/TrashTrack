@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../constants.dart';
@@ -66,6 +67,9 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
       (_label == null || p.label == _label) &&
       (_types.isEmpty || p.types.any(_types.contains));
 
+  /// Where the collector is, once they tap "my location".
+  LatLng? _me;
+
   Future<void> _goToMe() async {
     final messenger = ScaffoldMessenger.of(context);
     final (loc, err) = await currentLocation();
@@ -74,6 +78,7 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
     } else if (!isInsideTagum(loc)) {
       showMessage(messenger, 'You are outside Tagum City.', error: true);
     } else {
+      setState(() => _me = loc);
       _map.move(loc, 16);
     }
   }
@@ -181,6 +186,7 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
                   TagumMap(
                     controller: _map,
                     markers: [
+                      if (_me != null) MyLocationDot.marker(_me!),
                       for (final p in shown)
                         Marker(
                           point: p.location,

@@ -54,8 +54,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       _pin = e.location;
       _notes.text = e.notes;
     } else {
-      final followed = context.read<AppUser>().followedBarangays;
-      if (followed.length == 1) _barangay = followed.first;
+      final user = context.read<AppUser>();
+      final followed = user.followedBarangays;
+      if (user.barangay.isNotEmpty) {
+        _barangay = user.barangay; // set on the Profile tab
+      } else if (followed.length == 1) {
+        _barangay = followed.first;
+      }
     }
     _notes.addListener(_touch);
   }

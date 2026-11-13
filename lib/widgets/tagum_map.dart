@@ -62,6 +62,30 @@ class TagumMap extends StatelessWidget {
   }
 }
 
+/// Blue "you are here" dot, like Google Maps.
+class MyLocationDot extends StatelessWidget {
+  const MyLocationDot({super.key});
+
+  static const size = 26.0;
+
+  static Marker marker(LatLng point) => Marker(
+    point: point,
+    width: size,
+    height: size,
+    child: const MyLocationDot(),
+  );
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: const Color(0xFF1A73E8),
+      shape: BoxShape.circle,
+      border: Border.all(color: Colors.white, width: 4),
+      boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)],
+    ),
+  );
+}
+
 /// Current GPS position, or null with a reason if unavailable.
 Future<(LatLng?, String?)> currentLocation() async {
   if (!await Geolocator.isLocationServiceEnabled()) {

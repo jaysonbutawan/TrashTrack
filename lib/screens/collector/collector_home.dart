@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/app_user.dart';
 import '../../models/post.dart';
 import '../../data/repositories.dart';
-import '../../widgets/common.dart';
+import '../common/profile_tab.dart';
 import 'collector_map_tab.dart';
 import 'collector_reserved_tab.dart';
 import 'collector_routes_tab.dart';
@@ -21,7 +21,12 @@ class _CollectorHomeState extends State<CollectorHome> {
   late final Stream<CollectorRating> _rating = context
       .read<PostRepository>()
       .collectorRating(context.read<AppUser>().id);
-  static const _titles = ['Find Recyclables', 'My Reserved', 'My Routes'];
+  static const _titles = [
+    'Find Recyclables',
+    'My Reserved',
+    'My Routes',
+    'My Profile',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -46,22 +51,6 @@ class _CollectorHomeState extends State<CollectorHome> {
               );
             },
           ),
-          IconButton(
-            tooltip: 'Log out',
-            iconSize: 30,
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              final auth = context.read<AuthRepository>();
-              if (await confirm(
-                context,
-                'Log out?',
-                'Are you sure?',
-                yes: 'Log Out',
-              )) {
-                await auth.signOut();
-              }
-            },
-          ),
         ],
       ),
       body: IndexedStack(
@@ -70,6 +59,7 @@ class _CollectorHomeState extends State<CollectorHome> {
           CollectorMapTab(user: user),
           CollectorReservedTab(user: user),
           CollectorRoutesTab(user: user),
+          ProfileTab(user: user, showAppBar: false),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -85,6 +75,10 @@ class _CollectorHomeState extends State<CollectorHome> {
           NavigationDestination(
             icon: Icon(Icons.route, size: 30),
             label: 'Routes',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person, size: 30),
+            label: 'Profile',
           ),
         ],
       ),

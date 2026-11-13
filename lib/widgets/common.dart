@@ -104,8 +104,15 @@ Future<bool> confirm(
 
 /// Asks for a mobile number (needed once, before the first post, so the
 /// collector can call). Returns null if cancelled.
-Future<String?> askForPhone(BuildContext context) {
-  final c = TextEditingController();
+///
+/// [initial] pre-fills the field (editing on the Profile tab); [message]
+/// replaces the first-post explanation.
+Future<String?> askForPhone(
+  BuildContext context, {
+  String initial = '',
+  String? message,
+}) {
+  final c = TextEditingController(text: initial);
   final form = GlobalKey<FormState>();
   return showDialog<String>(
     context: context,
@@ -122,10 +129,11 @@ Future<String?> askForPhone(BuildContext context) {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'The collector who reserves your post will call or text you '
-              'on this number. We only ask once.',
-              style: TextStyle(fontSize: 16, color: Brand.inkSoft),
+            Text(
+              message ??
+                  'The collector who reserves your post will call or text you '
+                      'on this number. We only ask once.',
+              style: const TextStyle(fontSize: 16, color: Brand.inkSoft),
             ),
             const SizedBox(height: 14),
             TextFormField(
