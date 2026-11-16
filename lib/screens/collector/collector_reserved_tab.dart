@@ -36,9 +36,15 @@ class _CollectorReservedTabState extends State<CollectorReservedTab> {
         }
         final list = snap.data!;
         if (list.isEmpty) {
-          return const EmptyMessage(
+          return EmptyMessage(
             Icons.bookmark_border,
-            'Nothing reserved.\nGo to the Map to find recyclables.',
+            'Nothing reserved.\nGo to the Map to find recyclables, or see '
+            'the shortest route through the pickups near you.',
+            action: FilledButton.icon(
+              onPressed: () => openRouteGuide(context),
+              icon: const Icon(Icons.route),
+              label: const Text('Suggested Route'),
+            ),
           );
         }
         return ListView.builder(
@@ -94,18 +100,7 @@ class _RouteGuideBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () {
-            final user = context.read<AppUser>();
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => Provider.value(
-                  value: user,
-                  child: const RouteGuideScreen(),
-                ),
-              ),
-            );
-          },
+          onTap: () => openRouteGuide(context),
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Row(
@@ -134,7 +129,7 @@ class _RouteGuideBanner extends StatelessWidget {
                       ),
                       Text(
                         'Shortest way to your $n pickup${n == 1 ? '' : 's'} '
-                        '· ${formatKg(kg)}',
+                        '· ${formatKg(kg)} · with traffic',
                         style: const TextStyle(
                           fontSize: 14.5,
                           color: Colors.white70,

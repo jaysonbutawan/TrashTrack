@@ -8,6 +8,7 @@ import 'data/noop_push.dart';
 import 'data/repositories.dart';
 import 'data/supabase/supabase_backend.dart';
 import 'models/app_user.dart';
+import 'road_routing.dart';
 import 'screens/auth/finish_signup_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/collector/collector_home.dart';
@@ -21,6 +22,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final config = await AppConfig.load();
+  RoadRouter.instance = RoadRouter.fromKey(config.tomTomApiKey);
   if (!config.hasSupabase) {
     runApp(const SetupNeededApp());
     return;

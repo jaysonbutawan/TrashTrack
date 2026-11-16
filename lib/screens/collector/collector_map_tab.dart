@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../constants.dart';
@@ -16,6 +15,7 @@ import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 import '../../widgets/tagum_map.dart';
 import '../common/post_detail_screen.dart';
+import 'route_guide_screen.dart';
 
 class CollectorMapTab extends StatefulWidget {
   const CollectorMapTab({super.key, required this.user});
@@ -49,6 +49,7 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
   @override
   void dispose() {
     _routesSub?.cancel();
+    _liveSub?.cancel();
     super.dispose();
   }
 
@@ -67,21 +68,55 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
       (_label == null || p.label == _label) &&
       (_types.isEmpty || p.types.any(_types.contains));
 
-  /// Where the collector is, once they tap "my location".
-  LatLng? _me;
+  /// Where the collector is right now, updated live once they tap
+  /// "my location".
+  GpsFix? _me;
+  StreamSubscription<GpsFix>? _liveSub;
 
-  Future<void> _goToMe() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final (loc, err) = await currentLocation();
-    if (loc == null) {
-      showMessage(messenger, err!, error: true);
-    } else if (!isInsideTagum(loc)) {
-      showMessage(messenger, 'You are outside Tagum City.', error: true);
-    } else {
-      setState(() => _me = loc);
-      _map.move(loc, 16);
+  /// Keep the map centered on the collector while they move.
+  bool _follow = false;
+
+  void _goToMe() {
+    final me = _me;
+    if (me != null) {
+      setState(() => _follow = true);
+      _map.move(me.point, 17);
+      return;
     }
+    if (_liveSub != null) return; // still waiting for the first fix
+    final messenger = ScaffoldMessenger.of(context);
+    var first = true;
+    _liveSub = liveLocation().listen(
+      (fix) {
+        if (!mounted) return;
+        if (!isInsideTagum(fix.point)) {
+          if (first) {
+            showMessage(messenger, 'You are outside Tagum City.', error: true);
+          }
+          first = false;
+          return;
+        }
+        setState(() {
+          _me = fix;
+          if (first) _follow = true;
+        });
+        if (_follow) _map.move(fix.point, first ? 17 : _map.camera.zoom);
+        first = false;
+      },
+      onError: (Object e) {
+        showMessage(
+          messenger,
+          e is String ? e : 'Could not get your location.',
+          error: true,
+        );
+        _liveSub?.cancel();
+        _liveSub = null;
+      },
+    );
   }
+
+  void _openRoute({RecyclablePost? target}) =>
+      openRouteGuide(context, target: target);
 
   void _showSummary(RecyclablePost p) {
     showModalBottomSheet<void>(
@@ -103,13 +138,30 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    openPostDetail(context, p.id);
-                  },
-                  icon: const Icon(Icons.visibility),
-                  label: const Text('View & Reserve'),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _openRoute(target: p);
+                        },
+                        icon: const Icon(Icons.route),
+                        label: const Text('View Route'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          openPostDetail(context, p.id);
+                        },
+                        icon: const Icon(Icons.visibility),
+                        label: const Text('View & Reserve'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -185,8 +237,12 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
                 children: [
                   TagumMap(
                     controller: _map,
+                    maxZoom: 19,
+                    onCameraMoved: (_, byUser) {
+                      if (byUser && _follow) setState(() => _follow = false);
+                    },
+                    circles: [if (_me != null) _me!.accuracyCircle],
                     markers: [
-                      if (_me != null) MyLocationDot.marker(_me!),
                       for (final p in shown)
                         Marker(
                           point: p.location,
@@ -204,29 +260,54 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
                             ),
                           ),
                         ),
+                      if (_me != null) LiveLocationDot.marker(_me!),
                     ],
                   ),
                   Positioned(
                     top: 10,
                     left: 10,
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        child: Text(
-                          snap.hasError
-                              ? 'Could not load posts'
-                              : !snap.hasData
-                              ? 'Loading…'
-                              : '${shown.length} available',
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: Text(
+                              snap.hasError
+                                  ? 'Could not load posts'
+                                  : !snap.hasData
+                                  ? 'Loading…'
+                                  : '${shown.length} available',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        if (shown.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: FilledButton.tonalIcon(
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 44),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              onPressed: _openRoute,
+                              icon: const Icon(Icons.route, size: 20),
+                              label: const Text('Best Route'),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const Positioned(
@@ -263,9 +344,13 @@ class _CollectorMapTabState extends State<CollectorMapTab> {
                     right: 16,
                     child: FloatingActionButton.large(
                       heroTag: 'me',
-                      tooltip: 'My location',
+                      tooltip: 'My location (live)',
+                      backgroundColor: _follow ? const Color(0xFF1A73E8) : null,
+                      foregroundColor: _follow ? Colors.white : null,
                       onPressed: _goToMe,
-                      child: const Icon(Icons.my_location),
+                      child: Icon(
+                        _follow ? Icons.navigation : Icons.my_location,
+                      ),
                     ),
                   ),
                 ],

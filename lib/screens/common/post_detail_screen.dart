@@ -9,6 +9,7 @@ import '../../data/repositories.dart';
 import '../../widgets/common.dart';
 import '../../theme.dart';
 import '../../widgets/tagum_map.dart';
+import '../collector/route_guide_screen.dart';
 import '../household/create_post_screen.dart';
 
 void openPostDetail(BuildContext context, String postId) {
@@ -246,6 +247,14 @@ class _Actions extends StatelessWidget {
               label: const Text('Reserve'),
             ),
           );
+          // Check the trip (roads, traffic, time) before committing.
+          children.add(
+            OutlinedButton.icon(
+              onPressed: () => openRouteGuide(context, target: post),
+              icon: const Icon(Icons.route),
+              label: const Text('View Route'),
+            ),
+          );
         case PostStatus.reserved when mine:
           children.addAll([
             FilledButton.icon(
@@ -275,6 +284,11 @@ class _Actions extends StatelessWidget {
               onPressed: () => openDirections(post),
               icon: const Icon(Icons.directions),
               label: const Text('Directions'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => openRouteGuide(context, target: post),
+              icon: const Icon(Icons.route),
+              label: const Text('View Route & Traffic'),
             ),
             TextButton.icon(
               style: TextButton.styleFrom(

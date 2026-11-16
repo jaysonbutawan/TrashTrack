@@ -130,9 +130,17 @@ Future<(LatLng?, String?)> currentLocation() async {
 
 /// One GPS reading: where, and how sure the phone is (radius in meters).
 class GpsFix {
-  const GpsFix(this.point, this.accuracyMeters);
+  const GpsFix(this.point, this.accuracyMeters, {this.heading, this.speed});
   final LatLng point;
   final double accuracyMeters;
+
+  /// Direction of travel in degrees (0 = north), when moving.
+  final double? heading;
+
+  /// Meters per second, when known.
+  final double? speed;
+
+  bool get isMoving => (speed ?? 0) > 1;
 
   bool get isPrecise => accuracyMeters <= 25;
 
@@ -233,4 +241,80 @@ Future<(GpsFix?, String?)> preciseLocation({
   } catch (_) {
     return (null, 'Could not get your location.');
   }
+}
+
+typedef LiveLocator = Stream<GpsFix> Function();
+
+/// Continuous GPS updates (every ~5 m moved) so the map shows exactly where
+/// the collector is while they drive. Emits an error with a plain-language
+/// message when location is off or not allowed. Cancel the subscription to
+/// stop the GPS.
+Stream<GpsFix> liveLocation() async* {
+  try {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw 'Please turn on Location (GPS).';
+    }
+    var perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+    }
+    if (perm == LocationPermission.denied ||
+        perm == LocationPermission.deniedForever) {
+      throw 'Location permission was not allowed.';
+    }
+  } on String {
+    rethrow;
+  } catch (_) {
+    throw 'Could not get your location.';
+  }
+  final last = await Geolocator.getLastKnownPosition().catchError((_) => null);
+  if (last != null) yield _fix(last);
+  yield* Geolocator.getPositionStream(
+    locationSettings: const LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: 5,
+    ),
+  ).map(_fix);
+}
+
+GpsFix _fix(Position p) => GpsFix(
+  LatLng(p.latitude, p.longitude),
+  p.accuracy,
+  heading: p.heading >= 0 && p.speed > 1 ? p.heading : null,
+  speed: p.speed >= 0 ? p.speed : null,
+);
+
+/// Blue dot that shows which way the collector is heading while moving.
+class LiveLocationDot extends StatelessWidget {
+  const LiveLocationDot({super.key, this.heading});
+  final double? heading;
+
+  static const size = 44.0;
+
+  static Marker marker(GpsFix fix) => Marker(
+    point: fix.point,
+    width: size,
+    height: size,
+    child: LiveLocationDot(heading: fix.heading),
+  );
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    alignment: Alignment.center,
+    children: [
+      if (heading != null)
+        Transform.rotate(
+          angle: heading! * 3.141592653589793 / 180,
+          child: const Align(
+            alignment: Alignment.topCenter,
+            child: Icon(Icons.navigation, size: 22, color: Color(0xFF1A73E8)),
+          ),
+        ),
+      const SizedBox(
+        width: MyLocationDot.size,
+        height: MyLocationDot.size,
+        child: MyLocationDot(),
+      ),
+    ],
+  );
 }

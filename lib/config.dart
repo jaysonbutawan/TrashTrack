@@ -8,6 +8,7 @@ class AppConfig {
     required this.supabaseUrl,
     required this.supabaseKey,
     required this.googleWebClientId,
+    this.tomTomApiKey = '',
   });
 
   final String supabaseUrl;
@@ -18,6 +19,10 @@ class AppConfig {
   /// OAuth client ID of type **Web application** from Google Cloud — the same
   /// one entered in Supabase → Authentication → Providers → Google.
   final String googleWebClientId;
+
+  /// Optional TomTom key for live-traffic routes (developer.tomtom.com).
+  /// Blank = free OpenStreetMap routing with estimated rush-hour traffic.
+  final String tomTomApiKey;
 
   bool get hasSupabase => supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty;
 
@@ -30,6 +35,7 @@ class AppConfig {
           ? read('SUPABASE_PUBLISHABLE_KEY')
           : read('SUPABASE_ANON_KEY'),
       googleWebClientId: read('GOOGLE_WEB_CLIENT_ID'),
+      tomTomApiKey: read('TOMTOM_API_KEY'),
     );
   }
 }
