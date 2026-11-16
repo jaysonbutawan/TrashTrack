@@ -405,8 +405,8 @@ class SupabasePostRepository implements PostRepository {
       _rpc('reserve_post', {'post_id': postId});
 
   @override
-  Future<void> cancelReservation(String postId) =>
-      _rpc('cancel_reservation', {'post_id': postId});
+  Future<void> cancelReservation(String postId, {String reason = ''}) =>
+      _rpc('cancel_reservation', {'post_id': postId, 'reason': reason.trim()});
 
   @override
   Future<void> markCollected(String postId) =>

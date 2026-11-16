@@ -86,15 +86,15 @@ void main() {
     await settle(tester);
 
     await tester.scrollUntilVisible(
-      find.text('Adjust Pin'),
+      find.text('Use My Exact Location'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.textContaining('accurate to ±6 m'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Adjust Pin'));
+    await tester.ensureVisible(find.byTooltip('Full screen map'));
     await tester.pump();
-    await tester.tap(find.text('Adjust Pin'));
+    await tester.tap(find.byTooltip('Full screen map'));
     await settle(tester);
     expect(
       find.text('Drag the map so the pin is on your gate'),
@@ -103,13 +103,51 @@ void main() {
     expect(find.text('Pin is at your location'), findsOneWidget);
 
     // Drag the map: the pin (always in the middle) lands somewhere else.
-    await tester.drag(find.byType(FlutterMap), const Offset(-150, 0));
+    // The full-screen picker's map is on top of the form's small one.
+    await tester.drag(find.byType(FlutterMap).last, const Offset(-150, 0));
     await settle(tester);
     expect(find.textContaining('from you'), findsOneWidget);
 
     await tester.tap(find.text('Pickup Here'));
     await settle(tester);
     expect(find.text('Pin set. Collectors will go here.'), findsOneWidget);
+  });
+
+  testWidgets('the pin can be dragged right on the form', (tester) async {
+    phoneSize(tester);
+    Future<(GpsFix?, String?)> gps({void Function(GpsFix)? onProgress}) async =>
+        (const GpsFix(_house, 6), null);
+
+    final user = await auth.currentUser().first;
+    await tester.pumpWidget(
+      providers(
+        MaterialApp(
+          theme: buildTheme(),
+          home: Provider<AppUser>.value(
+            value: user!,
+            child: CreatePostScreen(locate: gps),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+    await tester.scrollUntilVisible(
+      find.text('Use My Exact Location'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.textContaining('accurate to ±6 m'), findsOneWidget);
+    expect(find.text('Drag the map to move the pin'), findsOneWidget);
+
+    // Drag the small map itself: no extra screen needed.
+    await tester.drag(find.byType(FlutterMap), const Offset(-120, 40));
+    await settle(tester);
+    expect(find.text('Pin set. Collectors will go here.'), findsOneWidget);
+
+    // The GPS button puts it back on the exact spot.
+    await tester.tap(find.text('Use My Exact Location'));
+    await settle(tester);
+    expect(find.textContaining('accurate to ±6 m'), findsOneWidget);
   });
 
   testWidgets('pin in another barangay blocks the post until fixed', (
@@ -146,7 +184,7 @@ void main() {
     await tester.tap(find.text('Magugpo Poblacion').first); // followed chip
     await settle(tester);
     await tester.scrollUntilVisible(
-      find.text('Adjust Pin'),
+      find.text('Use My Exact Location'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
@@ -185,7 +223,7 @@ void main() {
     );
     await settle(tester);
     await tester.scrollUntilVisible(
-      find.text('Set Pin'),
+      find.text('Use My Exact Location'),
       300,
       scrollable: find.byType(Scrollable).first,
     );

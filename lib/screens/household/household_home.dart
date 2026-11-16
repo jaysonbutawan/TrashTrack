@@ -481,13 +481,6 @@ class _Header extends StatelessWidget {
                         ],
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'My profile',
-                      iconSize: 28,
-                      color: Colors.white,
-                      onPressed: onProfile,
-                      icon: const Icon(Icons.manage_accounts),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 18),
@@ -873,7 +866,7 @@ class _ActiveCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = post;
-    final Widget trailing;
+    Widget trailing;
     if (p.status == PostStatus.reserved) {
       trailing = Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -887,8 +880,8 @@ class _ActiveCard extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                '${p.reservedByName ?? 'A collector'} is coming. '
-                'Agree on the price when they arrive.',
+                '${p.reservedByName ?? 'A collector'} is coming to pick '
+                'it up.',
                 style: const TextStyle(
                   fontSize: 15.5,
                   fontWeight: FontWeight.w600,
@@ -925,6 +918,36 @@ class _ActiveCard extends StatelessWidget {
           ),
         ],
       );
+      if (p.cancelReason.isNotEmpty) {
+        // Tell the household why the last collector backed out.
+        trailing = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Brand.kraftLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Brand.kraft, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'A collector cancelled: ${p.cancelReason}. '
+                      'It is back on the map.',
+                      style: const TextStyle(fontSize: 14.5, color: Brand.ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            trailing,
+          ],
+        );
+      }
     }
     return PostCard(
       post: p,

@@ -268,7 +268,7 @@ class MockPostRepository implements PostRepository {
   }
 
   @override
-  Future<void> cancelReservation(String postId) async {
+  Future<void> cancelReservation(String postId, {String reason = ''}) async {
     await Future<void>.delayed(_latency);
     final user = _s.requireUser();
     final i = _s.indexOfPost(postId);
@@ -281,6 +281,7 @@ class MockPostRepository implements PostRepository {
       reservedBy: () => null,
       reservedByName: () => null,
       reservedAt: () => null,
+      cancelReason: reason.trim(),
     );
     _s.notify();
   }

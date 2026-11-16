@@ -85,6 +85,27 @@ void main() {
     expect(find.text('NEXT STOP'), findsOneWidget);
   });
 
+  testWidgets('collector cancels a reservation and says why', (tester) async {
+    await pumpCollector(tester);
+    await tester.tap(find.text('Reserved'));
+    await settle(tester);
+    expect(find.text('Cancel'), findsNWidgets(2)); // p2 and p10
+
+    await tester.tap(find.text('Cancel').first);
+    await settle(tester);
+    expect(find.text('Cancel this pickup?'), findsOneWidget);
+    final confirm = find.widgetWithText(FilledButton, 'Cancel Reservation');
+    // A reason is required.
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+    await tester.tap(find.text('Price not agreed'));
+    await tester.pump();
+    await tester.tap(confirm);
+    await settle(tester);
+
+    expect(find.text('Cancel'), findsOneWidget); // one reservation left
+    expect(find.textContaining('back on the map'), findsOneWidget);
+  });
+
   testWidgets('routes tab suggests barangays and pre-ticks them', (
     tester,
   ) async {

@@ -82,8 +82,9 @@ abstract class PostRepository {
   /// Supabase: `rpc('reserve_post', {post_id})` — atomic, fails if taken.
   Future<void> reserve(String postId);
 
-  /// Supabase: `rpc('cancel_reservation', {post_id})`.
-  Future<void> cancelReservation(String postId);
+  /// Supabase: `rpc('cancel_reservation', {post_id, reason})`. [reason] is
+  /// shown to the household (e.g. "Price not agreed").
+  Future<void> cancelReservation(String postId, {String reason = ''});
 
   /// Supabase: `rpc('mark_collected', {post_id})`.
   Future<void> markCollected(String postId);

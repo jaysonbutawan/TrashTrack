@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/app_user.dart';
 import '../../models/post.dart';
 import '../../data/repositories.dart';
+import '../../widgets/cancel_reservation.dart';
 import '../../widgets/common.dart';
 import '../../theme.dart';
 import '../../widgets/tagum_map.dart';
@@ -298,20 +299,7 @@ class _Actions extends StatelessWidget {
                 foregroundColor: Colors.red.shade700,
                 textStyle: const TextStyle(fontSize: 18),
               ),
-              onPressed: () async {
-                if (await confirm(
-                      context,
-                      'Cancel reservation?',
-                      'Other collectors will be able to reserve it again.',
-                    ) &&
-                    context.mounted) {
-                  await runWithFeedback(
-                    context,
-                    () => posts.cancelReservation(post.id),
-                    successMessage: 'Reservation cancelled.',
-                  );
-                }
-              },
+              onPressed: () => cancelReservationWithReason(context, post),
               icon: const Icon(Icons.cancel),
               label: const Text('Cancel Reservation'),
             ),
@@ -381,7 +369,7 @@ class _Actions extends StatelessWidget {
         case PostStatus.reserved:
           children.add(
             const Text(
-              'A collector is coming. Agree on the price when they arrive.',
+              'A collector is coming to pick it up.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 18),
             ),

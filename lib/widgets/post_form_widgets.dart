@@ -523,10 +523,10 @@ class _BarangaySheetState extends State<_BarangaySheet> {
 
 // ───────────────────────────── purok ─────────────────────────────
 
-/// Field under the barangay that opens the barangay's purok list (from the
-/// purok files, or Purok 1–20). Disabled until a barangay is chosen.
-class PurokField extends StatelessWidget {
-  const PurokField({
+/// The chosen barangay's puroks, shown right away as chips with a search box
+/// on top. Typing a purok that is not listed offers it as a new chip.
+class PurokChooser extends StatefulWidget {
+  const PurokChooser({
     super.key,
     required this.barangay,
     required this.options,
@@ -535,147 +535,41 @@ class PurokField extends StatelessWidget {
     this.notes = const {},
   });
 
-  final String? barangay;
+  final String barangay;
   final List<String> options;
-
-  /// Hints shown under a purok in the list ("Santol").
-  final Map<String, String> notes;
   final String? value;
   final ValueChanged<String> onChanged;
 
-  @override
-  Widget build(BuildContext context) {
-    final has = value != null;
-    final enabled = barangay != null;
-    return Material(
-      color: has ? Brand.mint : Brand.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: has ? Brand.forest : Brand.line,
-          width: has ? 2 : 1.5,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: !enabled
-            ? null
-            : () async {
-                final picked = await pickPurok(
-                  context,
-                  barangay: barangay!,
-                  options: options,
-                  notes: notes,
-                  selected: value,
-                );
-                if (picked != null) onChanged(picked);
-              },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: has ? Brand.forest : Brand.paper,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.signpost_outlined,
-                  color: has ? Colors.white : Brand.inkSoft,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      has
-                          ? 'Purok'
-                          : enabled
-                          ? 'Choose purok'
-                          : 'Choose the barangay first',
-                      style: TextStyle(
-                        fontSize: has ? 14 : 18,
-                        color: Brand.inkSoft,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (has)
-                      Text(
-                        value!,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: Brand.ink,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Icon(Icons.search, color: enabled ? Brand.inkSoft : Brand.line),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Searchable list of one barangay's puroks. Typing a name that is not in
-/// the list offers it as "Use …".
-Future<String?> pickPurok(
-  BuildContext context, {
-  required String barangay,
-  required List<String> options,
-  Map<String, String> notes = const {},
-  String? selected,
-}) => showModalBottomSheet<String>(
-  context: context,
-  isScrollControlled: true,
-  showDragHandle: true,
-  builder: (_) => _PurokPicker(
-    barangay: barangay,
-    options: options,
-    notes: notes,
-    selected: selected,
-  ),
-);
-
-class _PurokPicker extends StatefulWidget {
-  const _PurokPicker({
-    required this.barangay,
-    required this.options,
-    required this.notes,
-    required this.selected,
-  });
-  final String barangay;
-  final List<String> options;
+  /// Hints from the purok files ("Santol"), searchable and shown small.
   final Map<String, String> notes;
-  final String? selected;
 
   @override
-  State<_PurokPicker> createState() => _PurokPickerState();
+  State<PurokChooser> createState() => _PurokChooserState();
 }
 
-class _PurokPickerState extends State<_PurokPicker> {
-  String _query = '';
+class _PurokChooserState extends State<PurokChooser> {
+  final _search = TextEditingController();
 
-  /// "abaca" → "Purok Abaca"; keeps "Sitio …" as typed.
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  String get _q => _search.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// "abaca" → "Purok Abaca"; "Sitio …" kept as typed.
   String get _typed {
-    final q = _query.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (q.isEmpty) return q;
+    final q = _q;
     if (RegExp(r'^(purok|sitio)\b', caseSensitive: false).hasMatch(q)) {
       return q[0].toUpperCase() + q.substring(1);
     }
-    return 'Purok $q';
+    return 'Purok ${q[0].toUpperCase()}${q.substring(1)}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final q = _query.trim().toLowerCase();
+    final q = _q.toLowerCase();
     final shown = [
       for (final p in widget.options)
         if (q.isEmpty ||
@@ -683,98 +577,93 @@ class _PurokPickerState extends State<_PurokPicker> {
             (widget.notes[p] ?? '').toLowerCase().contains(q))
           p,
     ];
-    // Offer the typed name only when it is not already in the list.
     final offerTyped =
         q.isNotEmpty &&
         !widget.options.any(
           (p) =>
               p.toLowerCase() == q || p.toLowerCase() == _typed.toLowerCase(),
         );
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.75,
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
+    // A typed purok that was picked earlier stays visible as a chip.
+    final value = widget.value;
+    final extra =
+        value != null && !widget.options.contains(value) && !offerTyped;
+
+    Widget chip(String p, {bool isNew = false}) {
+      final on = p == value;
+      final note = widget.notes[p] ?? '';
+      return ChoiceChip(
+        avatar: isNew ? const Icon(Icons.add, size: 18) : null,
+        label: Text(note.isEmpty ? p : '$p · $note'),
+        selected: on,
+        showCheckmark: false,
+        selectedColor: Brand.forest,
+        labelStyle: TextStyle(
+          fontSize: 15.5,
+          fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+          color: on ? Colors.white : Brand.ink,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Text(
-                'Purok in ${widget.barangay}',
-                style: const TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.w900,
-                  color: Brand.ink,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
-                autofocus: false,
-                style: const TextStyle(fontSize: 18),
-                textCapitalization: TextCapitalization.words,
-                onChanged: (v) => setState(() => _query = v),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search or type your purok',
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Expanded(
-              child: ListView(
-                children: [
-                  if (offerTyped)
-                    ListTile(
-                      leading: const Icon(Icons.add_location_alt),
-                      title: Text(
-                        'Use "$_typed"',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      onTap: () => Navigator.pop(context, _typed),
-                    ),
-                  for (final p in shown)
-                    ListTile(
-                      leading: Icon(
-                        p == widget.selected
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
-                        color: p == widget.selected
-                            ? Brand.forest
-                            : Brand.inkSoft,
-                      ),
-                      title: Text(
-                        p,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: p == widget.selected
-                              ? FontWeight.w800
-                              : FontWeight.w500,
-                        ),
-                      ),
-                      subtitle: (widget.notes[p] ?? '').isEmpty
-                          ? null
-                          : Text(
-                              widget.notes[p]!,
-                              style: const TextStyle(
-                                fontSize: 14.5,
-                                color: Brand.inkSoft,
-                              ),
-                            ),
-                      onTap: () => Navigator.pop(context, p),
-                    ),
-                ],
-              ),
-            ),
-          ],
+        onSelected: (_) {
+          widget.onChanged(p);
+          if (isNew) setState(_search.clear);
+        },
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Purok in ${widget.barangay}',
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: Brand.ink,
+          ),
         ),
-      ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _search,
+          style: const TextStyle(fontSize: 17),
+          textCapitalization: TextCapitalization.words,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: const Icon(Icons.search),
+            hintText: 'Search or type your purok',
+            suffixIcon: _search.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Clear',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(_search.clear),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Long lists (Visayan Village has 38) scroll inside the card.
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 230),
+          child: SingleChildScrollView(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (offerTyped) chip(_typed, isNew: true),
+                if (extra) chip(value),
+                for (final p in shown) chip(p),
+                if (shown.isEmpty && !offerTyped)
+                  const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Text(
+                      'No purok matches.',
+                      style: TextStyle(fontSize: 15, color: Brand.inkSoft),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -19,7 +19,7 @@ const double roadFactor = 1.3;
 /// Average speed of a tricycle / kariton collector in town, with stops.
 const double _kmPerHour = 18;
 
-/// Minutes spent at each house (weighing, agreeing on the price, loading).
+/// Minutes spent at each house (weighing and loading).
 const int minutesPerStop = 6;
 
 class PlannedRoute {

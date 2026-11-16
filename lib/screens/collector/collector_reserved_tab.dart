@@ -5,6 +5,7 @@ import '../../models/app_user.dart';
 import '../../models/post.dart';
 import '../../data/repositories.dart';
 import '../../theme.dart';
+import '../../widgets/cancel_reservation.dart';
 import '../../widgets/common.dart';
 import '../common/post_detail_screen.dart';
 import 'route_guide_screen.dart';
@@ -57,24 +58,45 @@ class _CollectorReservedTabState extends State<CollectorReservedTab> {
               post: p,
               showStatus: false, // everything on this tab is reserved
               onTap: () => openPostDetail(context, p.id),
-              trailing: FilledButton.icon(
-                style: FilledButton.styleFrom(minimumSize: const Size(0, 50)),
-                onPressed: () async {
-                  if (await confirm(
-                        context,
-                        'Mark as collected?',
-                        'Did you already pick up these recyclables?',
-                      ) &&
-                      context.mounted) {
-                    await runWithFeedback(
-                      context,
-                      () => service.markCollected(p.id),
-                      successMessage: 'Marked as collected.',
-                    );
-                  }
-                },
-                icon: const Icon(Icons.check_circle),
-                label: const Text('Collected'),
+              trailing: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 50),
+                        foregroundColor: Brand.danger,
+                        side: const BorderSide(color: Brand.danger),
+                      ),
+                      onPressed: () => cancelReservationWithReason(context, p),
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 50),
+                      ),
+                      onPressed: () async {
+                        if (await confirm(
+                              context,
+                              'Mark as collected?',
+                              'Did you already pick up these recyclables?',
+                            ) &&
+                            context.mounted) {
+                          await runWithFeedback(
+                            context,
+                            () => service.markCollected(p.id),
+                            successMessage: 'Marked as collected.',
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.check_circle),
+                      label: const Text('Collected'),
+                    ),
+                  ),
+                ],
               ),
             );
           },

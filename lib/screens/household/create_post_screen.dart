@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart' show Marker;
+
+import 'dart:async';
+
+import 'package:flutter_map/flutter_map.dart' show MapController;
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
@@ -74,6 +77,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   /// The pin came from the GPS and the user has not adjusted it yet.
   bool _pinFromGps = false;
+
+  /// Small map in the form: the pin stays in the middle, drag to move it.
+  final _map = MapController();
+  Timer? _dragCheck;
+
+  /// A finger is on the map: the form must not scroll meanwhile.
+  bool _touchingMap = false;
   bool _dirty = false;
   bool _phoneSaved = false;
 
@@ -141,6 +151,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   @override
   void dispose() {
+    _dragCheck?.cancel();
     _notes.dispose();
     super.dispose();
   }
@@ -188,6 +199,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         if ((_pin == null || _pinFromGps) && isInsideTagum(f.point)) {
           _pin = f.point;
           _pinFromGps = true;
+          _showPin(f.point);
         }
       });
     }
@@ -218,8 +230,34 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         _pin = picked;
         _pinFromGps = false;
       });
+      _showPin(picked);
       _checkPin();
     }
+  }
+
+  /// Centers the small map on [p] (after GPS or the full-screen picker).
+  void _showPin(LatLng p) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        _map.move(p, _pinZoom);
+      } catch (_) {
+        // Map not built yet; it starts at the pin anyway.
+      }
+    });
+  }
+
+  static const double _pinZoom = 17;
+
+  /// The user dragged the small map: the pin is wherever the middle is now.
+  void _dragged(LatLng center) {
+    if (!isInsideTagum(center)) return;
+    _update(() {
+      _pin = center;
+      _pinFromGps = false;
+    });
+    // Ask which barangay once the finger rests, not on every frame.
+    _dragCheck?.cancel();
+    _dragCheck = Timer(const Duration(milliseconds: 800), _checkPin);
   }
 
   // Order matches the step numbers on screen.
@@ -391,27 +429,21 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     },
   );
 
-  Widget _labelChoice() => IntrinsicHeight(
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final l in PostLabel.values) ...[
-          if (l != PostLabel.values.first) const SizedBox(width: 10),
-          Expanded(
-            child: _ChoiceCard(
-              color: l.color,
-              icon: l.icon,
-              title: l.label,
-              subtitle: l == PostLabel.forSale
-                  ? 'Collector pays you. Agree on the price at pickup.'
-                  : 'Give it away. Nothing to pay.',
-              selected: _label == l,
-              onTap: () => _update(() => _label = l),
-            ),
+  Widget _labelChoice() => Row(
+    children: [
+      for (final l in PostLabel.values) ...[
+        if (l != PostLabel.values.first) const SizedBox(width: 10),
+        Expanded(
+          child: _ChoiceCard(
+            color: l.color,
+            icon: l.icon,
+            title: l.label,
+            selected: _label == l,
+            onTap: () => _update(() => _label = l),
           ),
-        ],
+        ),
       ],
-    ),
+    ],
   );
 
   Widget _locationSection() {
@@ -446,41 +478,97 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Still preview; tapping it opens the full-screen pin picker.
-        GestureDetector(
-          onTap: _adjustPin,
+        // Drag the map to move the pin, which stays in the middle.
+        Listener(
+          onPointerDown: (_) => setState(() => _touchingMap = true),
+          onPointerUp: (_) => setState(() => _touchingMap = false),
+          onPointerCancel: (_) => setState(() => _touchingMap = false),
           child: SizedBox(
-            height: 190,
+            height: 230,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: Stack(
                 children: [
                   TagumMap(
-                    // Rebuild the preview when the pin moves.
-                    key: ValueKey(pin),
-                    interactive: false,
+                    controller: _map,
                     initialCenter: pin,
-                    initialZoom: pin == null ? 13 : 17,
+                    initialZoom: pin == null ? 13 : _pinZoom,
+                    maxZoom: 19,
+                    onCameraMoved: (center, byUser) {
+                      if (byUser) _dragged(center);
+                    },
                     circles: [
                       if (_pinFromGps && fix != null) fix.accuracyCircle,
                     ],
-                    markers: [
-                      if (pin != null)
-                        Marker(
-                          point: pin,
-                          width: 52,
-                          height: 52,
-                          alignment: Alignment.topCenter,
+                  ),
+                  // The pin's tip marks the middle of the map.
+                  if (pin != null)
+                    IgnorePointer(
+                      child: Center(
+                        child: Transform.translate(
+                          offset: const Offset(0, -24),
                           child: const Icon(
                             Icons.location_pin,
                             size: 52,
                             color: Brand.danger,
+                            shadows: [
+                              Shadow(color: Colors.black38, blurRadius: 6),
+                            ],
                           ),
                         ),
-                    ],
-                  ),
+                      ),
+                    ),
                   if (pin == null && _locating)
                     const Center(child: CircularProgressIndicator()),
+                  Positioned(
+                    left: 8,
+                    top: 8,
+                    child: IgnorePointer(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.pan_tool_alt,
+                              size: 16,
+                              color: Brand.forest,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              pin == null
+                                  ? 'Drag the map to place the pin'
+                                  : 'Drag the map to move the pin',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Brand.ink,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: IconButton.filledTonal(
+                      tooltip: 'Full screen map',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.92),
+                      ),
+                      onPressed: _adjustPin,
+                      icon: const Icon(Icons.open_in_full, color: Brand.forest),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -522,38 +610,26 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             onSwitch: () => _setBarangay(_pinBarangay!),
           ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: _adjustPin,
-                icon: const Icon(Icons.pan_tool_alt),
-                label: Text(pin == null ? 'Set Pin' : 'Adjust Pin'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            IconButton.outlined(
-              tooltip: 'Find my location again',
-              style: IconButton.styleFrom(
-                minimumSize: const Size(58, 58),
-                backgroundColor: Brand.card,
-                side: const BorderSide(color: Brand.forest, width: 1.8),
-              ),
-              onPressed: _locating
-                  ? null
-                  : () {
-                      _pinFromGps = true;
-                      _locate();
-                    },
-              icon: _locating
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
-                    )
-                  : const Icon(Icons.my_location, color: Brand.forest),
-            ),
-          ],
+        // Back to the exact GPS spot after dragging.
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            backgroundColor: Brand.card,
+            side: const BorderSide(color: Brand.forest, width: 1.8),
+          ),
+          onPressed: _locating
+              ? null
+              : () {
+                  _pinFromGps = true;
+                  _locate();
+                },
+          icon: _locating
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                )
+              : const Icon(Icons.my_location, color: Brand.forest),
+          label: const Text('Use My Exact Location'),
         ),
       ],
     );
@@ -572,6 +648,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       child: Scaffold(
         appBar: AppBar(title: Text(_isEdit ? 'Edit Post' : 'Post Recyclables')),
         body: ListView(
+          // Dragging the pickup map must not scroll the form.
+          physics: _touchingMap ? const NeverScrollableScrollPhysics() : null,
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
           children: [
             _StepCard(
@@ -615,21 +693,21 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     followed: user.followedBarangays,
                     onChanged: _setBarangay,
                   ),
-                  const SizedBox(height: 10),
-                  PurokField(
-                    barangay: _barangay,
-                    options: _barangay == null
-                        ? const []
-                        : _purokList.puroksOf(_barangay!),
-                    notes: _barangay == null
-                        ? const {}
-                        : {
-                            for (final p in _purokList.puroksOf(_barangay!))
-                              p: _purokList.noteOf(_barangay!, p),
-                          },
-                    value: _purok,
-                    onChanged: (p) => _update(() => _purok = p),
-                  ),
+                  if (_barangay != null) ...[
+                    const SizedBox(height: 14),
+                    PurokChooser(
+                      // Fresh search box for each barangay.
+                      key: ValueKey(_barangay),
+                      barangay: _barangay!,
+                      options: _purokList.puroksOf(_barangay!),
+                      notes: {
+                        for (final p in _purokList.puroksOf(_barangay!))
+                          p: _purokList.noteOf(_barangay!, p),
+                      },
+                      value: _purok,
+                      onChanged: (p) => _update(() => _purok = p),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -846,12 +924,12 @@ class _TypeTile extends StatelessWidget {
   }
 }
 
+/// Small pill: icon + "For Sale" / "Free". Fills with its color when picked.
 class _ChoiceCard extends StatelessWidget {
   const _ChoiceCard({
     required this.color,
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.selected,
     required this.onTap,
   });
@@ -859,7 +937,6 @@ class _ChoiceCard extends StatelessWidget {
   final Color color;
   final IconData icon;
   final String title;
-  final String subtitle;
   final bool selected;
   final VoidCallback onTap;
 
@@ -868,35 +945,28 @@ class _ChoiceCard extends StatelessWidget {
     return Material(
       color: selected ? color : Brand.paper,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: selected ? color : Brand.line, width: 2),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: SizedBox(
+          height: 54,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 34, color: selected ? Colors.white : color),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: selected ? Colors.white : Brand.ink,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: selected
-                      ? Colors.white.withValues(alpha: 0.9)
-                      : Brand.inkSoft,
+              Icon(icon, size: 24, color: selected ? Colors.white : color),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  title,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: selected ? Colors.white : Brand.ink,
+                  ),
                 ),
               ),
             ],

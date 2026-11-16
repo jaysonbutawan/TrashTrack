@@ -13,6 +13,7 @@ import '../../models/post.dart';
 import '../../road_routing.dart';
 import '../../route_planner.dart';
 import '../../theme.dart';
+import '../../widgets/cancel_reservation.dart';
 import '../../widgets/common.dart';
 import '../../widgets/recyclable_style.dart';
 import '../../widgets/tagum_map.dart';
@@ -981,12 +982,18 @@ class _StopTile extends StatelessWidget {
   final VoidCallback onCollected;
   final VoidCallback onReserve;
 
-  Widget _action(IconData icon, String label, VoidCallback onTap) => Expanded(
+  Widget _action(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    Color? color,
+  }) => Expanded(
     child: TextButton.icon(
       style: TextButton.styleFrom(
+        foregroundColor: color,
         minimumSize: const Size(0, 46),
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        textStyle: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        textStyle: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
       ),
       onPressed: onTap,
       icon: Icon(icon, size: 20),
@@ -1105,6 +1112,12 @@ class _StopTile extends StatelessWidget {
                       () => callPhone(context, p.householdPhone),
                     ),
                     _action(Icons.check_circle, 'Collected', onCollected),
+                    _action(
+                      Icons.cancel_outlined,
+                      'Cancel',
+                      () => cancelReservationWithReason(context, p),
+                      color: Brand.danger,
+                    ),
                   ] else if (p.status == PostStatus.available)
                     _action(Icons.bookmark_add, 'Reserve', onReserve),
                 ],

@@ -55,6 +55,7 @@ class RecyclablePost {
     required this.createdAt,
     this.notes = '',
     this.purok = '',
+    this.cancelReason = '',
     this.reservedBy,
     this.reservedByName,
     this.reservedAt,
@@ -82,6 +83,10 @@ class RecyclablePost {
 
   /// Purok within [barangay]; empty on older posts.
   final String purok;
+
+  /// Why the last collector gave the reservation back ("Price not agreed");
+  /// empty if none did.
+  final String cancelReason;
   final String? reservedBy;
   final String? reservedByName;
   final DateTime? reservedAt;
@@ -118,6 +123,7 @@ class RecyclablePost {
     LatLng? location,
     String? barangay,
     String? purok,
+    String? cancelReason,
     PostLabel? label,
     String? notes,
     PostStatus? status,
@@ -137,6 +143,7 @@ class RecyclablePost {
     location: location ?? this.location,
     barangay: barangay ?? this.barangay,
     purok: purok ?? this.purok,
+    cancelReason: cancelReason ?? this.cancelReason,
     label: label ?? this.label,
     status: status ?? this.status,
     createdAt: createdAt,
@@ -169,6 +176,7 @@ class RecyclablePost {
     ),
     barangay: m['barangay'] as String? ?? '',
     purok: m['purok'] as String? ?? '',
+    cancelReason: m['cancel_reason'] as String? ?? '',
     label: PostLabel.fromDb(m['label'] as String?),
     status: PostStatus.fromName(m['status'] as String?),
     createdAt: _date(m['created_at'])!,

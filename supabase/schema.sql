@@ -50,6 +50,8 @@ create table public.posts (
   lng              double precision not null check (lng between 125.68 and 125.93),
   barangay         text not null,
   purok            text not null default '' check (length(purok) <= 60),
+  -- why the last collector cancelled; shown to the household
+  cancel_reason    text not null default '',
   label            text not null check (label in ('for_sale', 'free')),
   status           text not null default 'available'
                    check (status in ('available', 'reserved', 'collected')),
@@ -213,11 +215,13 @@ begin
   end if;
 end $$;
 
-create function public.cancel_reservation(post_id uuid) returns void
+create function public.cancel_reservation(post_id uuid, reason text default '')
+returns void
 language plpgsql security definer set search_path = public as $$
 begin
   update posts set status = 'available', reserved_by = null,
-                   reserved_by_name = null, reserved_at = null
+                   reserved_by_name = null, reserved_at = null,
+                   cancel_reason = left(coalesce(trim(reason), ''), 120)
    where id = post_id and status = 'reserved' and reserved_by = auth.uid();
   if not found then
     raise exception 'You can no longer cancel this.';
