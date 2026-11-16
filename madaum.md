@@ -1,0 +1,9 @@
+• Purok 1-C 
+• Purok 2 
+• Purok 15 
+• Purok 18 
+• Purok 21
+• Purok 28-A
+• Purok 28-B 
+• Purok 28-C 
+• Purok 29 

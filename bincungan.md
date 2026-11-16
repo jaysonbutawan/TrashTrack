@@ -1,0 +1,15 @@
+• Purok Daisy
+• Purok Diamante
+• Purok Euphorbia
+• Purok Everlasting
+• Purok Gumamela
+• Purok Ilang-Ilang
+• Purok Mangga
+• Purok Orchids
+• Purok Rosal
+• Purok Rose
+• Purok Sampaguita
+• Purok Santan
+• Purok Sunflower
+• Purok Talaba
+• Purok Waling-Waling

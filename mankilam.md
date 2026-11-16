@@ -1,0 +1,23 @@
+• Purok Abaca 
+• Purok Banana
+• Purok Bautista
+• Purok Cabanisas
+• Purok Capitol
+• Purok Carig I
+• Purok Durian
+• Purok Galingan
+• Purok Garcia
+• Purok Kalubiran
+• Purok Lemonsito
+• Purok Lomboy
+• Purok Magkidong
+• Purok Magsanoc 
+• Purok Magtalisay
+• Purok Magtaya
+• Purok Maligaya
+• Purok Mangga
+• Purok Orchids
+• Purok Papaya
+• Purok Pioneer
+• Purok Uraya 
+• Purok Greenland
