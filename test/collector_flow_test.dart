@@ -4,6 +4,7 @@ import 'package:hitchmeup/data/noop_push.dart';
 import 'package:hitchmeup/data/repositories.dart';
 import 'package:hitchmeup/main.dart';
 import 'package:hitchmeup/models/app_user.dart';
+import 'package:hitchmeup/screens/collector/navigation_screen.dart';
 import 'package:provider/provider.dart';
 
 import 'support/mock_backend.dart';
@@ -16,6 +17,8 @@ void main() {
       await t.pump(const Duration(milliseconds: 100));
     }
   }
+
+  late MockStore store;
 
   Future<void> pumpCollector(WidgetTester tester) async {
     // flutter_map's attribution label overflows only with the square-glyph
@@ -32,7 +35,7 @@ void main() {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
-    final store = MockStore();
+    store = MockStore();
     final auth = MockAuthRepository(store)..signInAs(UserRole.collector);
     await tester.pumpWidget(
       MultiProvider(
@@ -83,6 +86,16 @@ void main() {
     await tester.pump();
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('NEXT STOP'), findsOneWidget);
+
+    // Navigation happens inside the app; Google Maps is only a backup.
+    expect(find.byTooltip('Open in Google Maps'), findsOneWidget);
+    await tester.tap(find.text('Start Navigation (All Stops)'));
+    await settle(tester);
+    expect(find.byType(NavigationScreen), findsOneWidget);
+    expect(find.textContaining('Stop 1 of 2'), findsOneWidget);
+    await tester.tap(find.text('End'));
+    await settle(tester);
+    expect(find.byType(NavigationScreen), findsNothing);
   });
 
   testWidgets('collector cancels a reservation and says why', (tester) async {
@@ -104,6 +117,30 @@ void main() {
 
     expect(find.text('Cancel'), findsOneWidget); // one reservation left
     expect(find.textContaining('back on the map'), findsOneWidget);
+  });
+
+  testWidgets('collector deletes one of their routes', (tester) async {
+    await pumpCollector(tester);
+    await tester.tap(find.text('Routes'));
+    await settle(tester);
+    await tester.scrollUntilVisible(
+      find.byTooltip('Cancel route').first,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    int mine() =>
+        store.routes.where((r) => r.collectorId == 'u-collector-1').length;
+    final before = mine();
+    final first = store.routes.firstWhere(
+      (r) => r.collectorId == 'u-collector-1',
+    );
+    await tester.tap(find.byTooltip('Cancel route').first);
+    await settle(tester);
+    await tester.tap(find.text('Yes'));
+    await settle(tester);
+    expect(find.text('Route cancelled.'), findsOneWidget);
+    expect(mine(), before - 1);
+    expect(store.routes.any((r) => r.id == first.id), isFalse);
   });
 
   testWidgets('routes tab suggests barangays and pre-ticks them', (

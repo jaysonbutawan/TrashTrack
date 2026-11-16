@@ -121,14 +121,17 @@ create trigger routes_fill_collector
   for each row execute function public.fill_route_collector();
 
 -- ───────────────────────── ratings view ─────────────────────────
+-- Runs as its owner so everyone sees riders' averages, even though other
+-- people's reserved/collected posts are private.
 create view public.collector_ratings
-with (security_invoker = true) as
+with (security_invoker = false) as
   select reserved_by as collector_id,
          avg(rating)::float as average,
          count(rating)      as count
   from public.posts
   where rating is not null
   group by reserved_by;
+grant select on public.collector_ratings to authenticated;
 
 -- ───────────────────────── helpers ─────────────────────────
 create function public.my_role() returns text
@@ -166,8 +169,13 @@ create policy "users update own profile"
 revoke update on public.profiles from authenticated, anon;
 grant update (name, phone, barangay, followed_barangays) on public.profiles to authenticated;
 
-create policy "posts readable by signed-in users"
-  on public.posts for select to authenticated using (true);
+-- Reserved/collected posts are private to the household and the collector
+-- who reserved; available ones (incl. cancelled) are visible to everyone.
+create policy "posts readable when available or involved"
+  on public.posts for select to authenticated
+  using (status = 'available'
+         or household_id = auth.uid()
+         or reserved_by = auth.uid());
 create policy "households create own available posts"
   on public.posts for insert to authenticated
   with check (household_id = auth.uid() and public.my_role() = 'household'
@@ -261,6 +269,9 @@ grant execute on function public.reserve_post, public.cancel_reservation,
 
 -- ───────────────────────── realtime ─────────────────────────
 alter publication supabase_realtime add table public.posts, public.routes, public.profiles;
+-- Full rows in UPDATE/DELETE events, so filtered streams see them.
+alter table public.posts  replica identity full;
+alter table public.routes replica identity full;
 
 -- ───────────────────────── storage ─────────────────────────
 -- Public bucket for post photos, path: post-photos/{user_id}/{file}.jpg

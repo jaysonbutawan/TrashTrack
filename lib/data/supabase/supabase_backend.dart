@@ -292,13 +292,60 @@ class SupabasePostRepository implements PostRepository {
       .order('created_at')
       .map(_rows);
 
+  /// Asks every open [availablePosts] list to reload now.
+  final _reloadAvailable = StreamController<void>.broadcast();
+
+  /// Available posts, always from a fresh query.
+  ///
+  /// Reserved posts are private (only the household and the reserving
+  /// collector can read them), so other collectors do not get a realtime
+  /// event when a post they can see gets reserved. Realtime is therefore
+  /// only a "something changed" signal; the list itself is re-queried on
+  /// each signal, every 20 s, and right after a failed reservation.
   @override
-  Stream<List<RecyclablePost>> availablePosts() => _db
-      .from('posts')
-      .stream(primaryKey: ['id'])
-      .eq('status', PostStatus.available.name)
-      .order('created_at')
-      .map(_rows);
+  Stream<List<RecyclablePost>> availablePosts() {
+    late final StreamController<List<RecyclablePost>> out;
+    StreamSubscription<void>? live, reload;
+    Timer? poll, debounce;
+
+    Future<void> query() async {
+      try {
+        final rows = await _db
+            .from('posts')
+            .select()
+            .eq('status', PostStatus.available.name)
+            .order('created_at');
+        if (!out.isClosed) out.add(_rows(rows));
+      } catch (e) {
+        if (!out.isClosed) out.addError(e);
+      }
+    }
+
+    void soon() {
+      debounce?.cancel();
+      debounce = Timer(const Duration(milliseconds: 400), query);
+    }
+
+    out = StreamController<List<RecyclablePost>>(
+      onListen: () {
+        query();
+        live = _db
+            .from('posts')
+            .stream(primaryKey: ['id'])
+            .eq('status', PostStatus.available.name)
+            .listen((_) => soon(), onError: (_) {});
+        reload = _reloadAvailable.stream.listen((_) => query());
+        poll = Timer.periodic(const Duration(seconds: 20), (_) => query());
+      },
+      onCancel: () async {
+        poll?.cancel();
+        debounce?.cancel();
+        await reload?.cancel();
+        await live?.cancel();
+      },
+    );
+    return out.stream;
+  }
 
   @override
   Stream<List<RecyclablePost>> reservedBy(String collectorId) => _db
@@ -401,8 +448,15 @@ class SupabasePostRepository implements PostRepository {
       _guard(() => _db.rpc(fn, params: params));
 
   @override
-  Future<void> reserve(String postId) =>
-      _rpc('reserve_post', {'post_id': postId});
+  Future<void> reserve(String postId) async {
+    try {
+      await _rpc('reserve_post', {'post_id': postId});
+    } catch (_) {
+      // Usually "already reserved": drop the stale pin from the map now.
+      _reloadAvailable.add(null);
+      rethrow;
+    }
+  }
 
   @override
   Future<void> cancelReservation(String postId, {String reason = ''}) =>
@@ -417,15 +471,29 @@ class SupabasePostRepository implements PostRepository {
       _rpc('rate_collector', {'post_id': postId, 'stars': stars});
 
   @override
-  Stream<CollectorRating> collectorRating(String collectorId) => _db
-      .from('posts')
-      .stream(primaryKey: ['id'])
-      .eq('reserved_by', collectorId)
-      .map(
-        (rows) => CollectorRating.fromStars(
-          rows.map((r) => (r['rating'] as num?)?.toInt()).whereType<int>(),
-        ),
-      );
+  /// From the public `collector_ratings` view (averages only), since
+  /// households can no longer read a rider's other posts. Views cannot be
+  /// streamed, so it refreshes every minute.
+  Stream<CollectorRating> collectorRating(String collectorId) async* {
+    while (true) {
+      try {
+        final row = await _db
+            .from('collector_ratings')
+            .select('average, count')
+            .eq('collector_id', collectorId)
+            .maybeSingle();
+        yield row == null
+            ? const CollectorRating(null, 0)
+            : CollectorRating(
+                (row['average'] as num?)?.toDouble(),
+                (row['count'] as num?)?.toInt() ?? 0,
+              );
+      } catch (_) {
+        // Keep the last value; try again next minute.
+      }
+      await Future<void>.delayed(const Duration(minutes: 1));
+    }
+  }
 }
 
 // ───────────────────────────── routes ─────────────────────────────
@@ -478,6 +546,16 @@ class SupabaseRouteRepository implements RouteRepository {
   );
 
   @override
-  Future<void> delete(String routeId) =>
-      _guard(() => _db.from('routes').delete().eq('id', routeId));
+  Future<void> delete(String routeId) => _guard(() async {
+    // A delete that RLS blocks removes 0 rows without an error; ask for the
+    // deleted row back so that case is reported instead of "cancelled".
+    final rows = await _db
+        .from('routes')
+        .delete()
+        .eq('id', routeId)
+        .select('id');
+    if (rows.isEmpty) {
+      throw BackendException('Could not cancel this route. Please try again.');
+    }
+  });
 }

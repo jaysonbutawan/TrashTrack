@@ -42,7 +42,11 @@ class RoadRoute {
     required this.trafficSeconds,
     required this.liveTraffic,
     this.summary = '',
+    this.steps = const [],
   });
+
+  /// Turn-by-turn instructions, in order (empty when the provider gave none).
+  final List<NavStep> steps;
 
   /// Road geometry to draw on the map.
   final List<LatLng> points;
@@ -64,6 +68,83 @@ class RoadRoute {
   int get minutes => (seconds / 60).ceil();
   TrafficLevel get traffic =>
       TrafficLevel.fromDelay(trafficSeconds, freeFlowSeconds);
+}
+
+/// One turn-by-turn instruction: what to do at [point].
+class NavStep {
+  const NavStep({
+    required this.point,
+    required this.instruction,
+    this.maneuver = '',
+    this.meters = 0,
+    this.stop,
+  });
+
+  /// Where the maneuver happens.
+  final LatLng point;
+
+  /// "Turn left onto Apokon Road".
+  final String instruction;
+
+  /// Provider's maneuver type ("turn", "arrive", "roundabout", …).
+  final String maneuver;
+
+  /// Road distance from this maneuver to the next one.
+  final double meters;
+
+  /// For an arrival: index of the stop reached (0 = first stop).
+  final int? stop;
+
+  bool get isArrival => stop != null;
+
+  @override
+  String toString() => instruction;
+}
+
+/// Plain-English instruction for an OSRM step.
+String osrmInstruction({
+  required String type,
+  String modifier = '',
+  String name = '',
+  int? exit,
+  int? stop,
+}) {
+  final onto = name.isEmpty ? '' : ' onto $name';
+  final on = name.isEmpty ? '' : ' on $name';
+  String turn(String m) => switch (m) {
+    'uturn' => 'Make a U-turn',
+    'straight' => 'Go straight',
+    'slight left' => 'Keep slightly left',
+    'slight right' => 'Keep slightly right',
+    'sharp left' => 'Turn sharp left',
+    'sharp right' => 'Turn sharp right',
+    'left' => 'Turn left',
+    'right' => 'Turn right',
+    _ => 'Continue',
+  };
+  switch (type) {
+    case 'depart':
+      return 'Start$on';
+    case 'arrive':
+      return stop == null ? 'You have arrived' : 'Arrive at stop ${stop + 1}';
+    case 'roundabout':
+    case 'rotary':
+    case 'roundabout turn':
+      return exit == null
+          ? 'Go through the roundabout$onto'
+          : 'At the roundabout, take exit $exit$onto';
+    case 'fork':
+      return '${modifier.contains('left') ? 'Keep left' : 'Keep right'}$onto';
+    case 'merge':
+      return 'Merge$onto';
+    case 'new name':
+    case 'continue':
+      return modifier == 'uturn' ? 'Make a U-turn$onto' : 'Continue$onto';
+    case 'end of road':
+      return '${turn(modifier)} at the end of the road$onto';
+    default: // turn, on ramp, off ramp, notification …
+      return '${turn(modifier)}$onto';
+  }
 }
 
 /// Road routes from the first waypoint through the rest, in order.
@@ -130,6 +211,25 @@ class StraightLineRouter extends RoadRouter {
         freeFlowSeconds: free,
         trafficSeconds: free * estimatedTrafficFactor(DateTime.now()),
         liveTraffic: false,
+        steps: [
+          if (waypoints.length > 1)
+            NavStep(
+              point: waypoints.first,
+              instruction: 'Head to stop 1',
+              maneuver: 'depart',
+              meters: metersBetween(waypoints[0], waypoints[1]) * roadFactor,
+            ),
+          for (var i = 1; i < waypoints.length; i++)
+            NavStep(
+              point: waypoints[i],
+              instruction: 'Arrive at stop $i',
+              maneuver: 'arrive',
+              stop: i - 1,
+              meters: i + 1 < waypoints.length
+                  ? metersBetween(waypoints[i], waypoints[i + 1]) * roadFactor
+                  : 0,
+            ),
+        ],
       ),
     ];
   }
@@ -164,7 +264,8 @@ class OsrmRouter extends RoadRouter {
     final alt = alternatives && waypoints.length == 2;
     final uri = Uri.parse(
       '$baseUrl/route/v1/driving/$coords'
-      '?overview=full&geometries=geojson&alternatives=${alt ? 3 : false}',
+      '?overview=full&geometries=geojson&steps=true'
+      '&alternatives=${alt ? 3 : false}',
     );
     final res = await _client.get(uri).timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) {
@@ -192,6 +293,34 @@ class OsrmRouter extends RoadRouter {
               if ((leg['summary'] as String? ?? '').isNotEmpty)
                 ...(leg['summary'] as String).split(', '),
           };
+          final legs = r['legs'] as List;
+          final steps = <NavStep>[
+            for (var li = 0; li < legs.length; li++)
+              for (final st in legs[li]['steps'] as List? ?? const [])
+                () {
+                  final m = st['maneuver'] as Map<String, dynamic>;
+                  final loc = m['location'] as List;
+                  final type = m['type'] as String? ?? '';
+                  // Middle "arrive" steps are the stops; the last leg's is too.
+                  final stop = type == 'arrive' ? li : null;
+                  return NavStep(
+                    point: LatLng(
+                      (loc[1] as num).toDouble(),
+                      (loc[0] as num).toDouble(),
+                    ),
+                    instruction: osrmInstruction(
+                      type: type,
+                      modifier: m['modifier'] as String? ?? '',
+                      name: st['name'] as String? ?? '',
+                      exit: (m['exit'] as num?)?.toInt(),
+                      stop: stop,
+                    ),
+                    maneuver: type,
+                    meters: (st['distance'] as num? ?? 0).toDouble(),
+                    stop: stop,
+                  );
+                }(),
+          ];
           return RoadRoute(
             points: coords,
             meters: (r['distance'] as num).toDouble(),
@@ -199,6 +328,7 @@ class OsrmRouter extends RoadRouter {
             trafficSeconds: free * trafficFactor,
             liveTraffic: false,
             summary: names.take(2).join(', '),
+            steps: steps,
           );
         }(),
     ];
@@ -240,6 +370,8 @@ class TomTomRouter extends RoadRouter {
           'travelMode': 'car',
           'routeType': 'fastest',
           'computeTravelTimeFor': 'all',
+          'instructionsType': 'text',
+          'language': 'en-US',
           if (alt) 'maxAlternatives': '2',
         },
       );
@@ -261,7 +393,42 @@ class TomTomRouter extends RoadRouter {
           final s = r['summary'] as Map<String, dynamic>;
           final total = (s['travelTimeInSeconds'] as num).toDouble();
           final delay = (s['trafficDelayInSeconds'] as num? ?? 0).toDouble();
+          final ins =
+              (r['guidance'] as Map?)?['instructions'] as List? ?? const [];
+          var stopNo = 0;
+          final steps = <NavStep>[
+            for (var i = 0; i < ins.length; i++)
+              () {
+                final it = ins[i] as Map<String, dynamic>;
+                final pt = it['point'] as Map<String, dynamic>;
+                final off = (it['routeOffsetInMeters'] as num? ?? 0).toDouble();
+                final next = i + 1 < ins.length
+                    ? ((ins[i + 1] as Map)['routeOffsetInMeters'] as num? ??
+                              off)
+                          .toDouble()
+                    : off;
+                final kind = it['instructionType'] as String? ?? '';
+                final arrive =
+                    kind == 'LOCATION_WAYPOINT' || kind == 'LOCATION_ARRIVAL';
+                final stop = arrive ? stopNo++ : null;
+                return NavStep(
+                  point: LatLng(
+                    (pt['latitude'] as num).toDouble(),
+                    (pt['longitude'] as num).toDouble(),
+                  ),
+                  instruction: arrive
+                      ? 'Arrive at stop ${stop! + 1}'
+                      : (it['message'] as String? ?? 'Continue'),
+                  maneuver: arrive
+                      ? 'arrive'
+                      : (it['maneuver'] as String? ?? '').toLowerCase(),
+                  meters: next - off,
+                  stop: stop,
+                );
+              }(),
+          ];
           return RoadRoute(
+            steps: steps,
             points: [
               for (final leg in r['legs'] as List)
                 for (final p in leg['points'] as List)

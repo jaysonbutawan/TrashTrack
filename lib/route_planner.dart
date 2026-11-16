@@ -2,6 +2,8 @@
 // test: shortest visiting order for a set of pickups, and which barangays
 // have the most recyclables waiting.
 
+import 'dart:math' as math;
+
 import 'package:latlong2/latlong.dart';
 
 import 'models/post.dart';
@@ -229,4 +231,54 @@ List<BarangayDemand> suggestBarangays(
       return byScore != 0 ? byScore : b.totalKg.compareTo(a.totalKg);
     });
   return list.take(count).toList();
+}
+
+// ── Following a route on the road (for in-app navigation) ──
+
+/// Where [p] falls on [path]: distance to the line, which segment, and how
+/// far along that segment (0–1).
+({double meters, int segment, double t}) nearestOnPath(
+  LatLng p,
+  List<LatLng> path,
+) {
+  if (path.length < 2) {
+    return (
+      meters: path.isEmpty ? double.infinity : metersBetween(p, path.first),
+      segment: 0,
+      t: 0,
+    );
+  }
+  // Local flat projection around p; fine for city distances.
+  final cosLat = math.cos(p.latitude * math.pi / 180);
+  double x(LatLng q) => (q.longitude - p.longitude) * 111320 * cosLat;
+  double y(LatLng q) => (q.latitude - p.latitude) * 110540;
+  var best = (meters: double.infinity, segment: 0, t: 0.0);
+  for (var i = 0; i < path.length - 1; i++) {
+    final ax = x(path[i]), ay = y(path[i]);
+    final bx = x(path[i + 1]), by = y(path[i + 1]);
+    final dx = bx - ax, dy = by - ay;
+    final len2 = dx * dx + dy * dy;
+    final t = len2 == 0
+        ? 0.0
+        : ((-ax * dx - ay * dy) / len2).clamp(0.0, 1.0).toDouble();
+    final px = ax + t * dx, py = ay + t * dy;
+    final d = math.sqrt(px * px + py * py);
+    if (d < best.meters) best = (meters: d, segment: i, t: t);
+  }
+  return best;
+}
+
+/// Meters from [p] to the nearest point of [path].
+double metersToPath(LatLng p, List<LatLng> path) =>
+    nearestOnPath(p, path).meters;
+
+/// Road meters still to go along [path] from where [p] is on it.
+double metersLeftOnPath(LatLng p, List<LatLng> path) {
+  if (path.length < 2) return path.isEmpty ? 0 : metersBetween(p, path.first);
+  final at = nearestOnPath(p, path);
+  var left = (1 - at.t) * metersBetween(path[at.segment], path[at.segment + 1]);
+  for (var i = at.segment + 1; i < path.length - 1; i++) {
+    left += metersBetween(path[i], path[i + 1]);
+  }
+  return left;
 }

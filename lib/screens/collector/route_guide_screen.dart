@@ -18,6 +18,7 @@ import '../../widgets/common.dart';
 import '../../widgets/recyclable_style.dart';
 import '../../widgets/tagum_map.dart';
 import '../common/post_detail_screen.dart';
+import 'navigation_screen.dart';
 
 typedef Locator = Future<(LatLng?, String?)> Function();
 
@@ -498,7 +499,8 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
         ),
         _StartBar(
           stops: plan.stops.length,
-          onPressed: () => _navigateAll(plan),
+          onPressed: () => openNavigation(context, plan.stops),
+          onGoogleMaps: () => _navigateAll(plan),
         ),
       ],
     );
@@ -1104,7 +1106,11 @@ class _StopTile extends StatelessWidget {
               const Divider(),
               Row(
                 children: [
-                  _action(Icons.directions, 'Go', () => openDirections(p)),
+                  _action(
+                    Icons.directions,
+                    'Go',
+                    () => openNavigation(context, [p]),
+                  ),
                   if (reservedByMe) ...[
                     _action(
                       Icons.call,
@@ -1131,9 +1137,18 @@ class _StopTile extends StatelessWidget {
 }
 
 class _StartBar extends StatelessWidget {
-  const _StartBar({required this.stops, required this.onPressed});
+  const _StartBar({
+    required this.stops,
+    required this.onPressed,
+    required this.onGoogleMaps,
+  });
   final int stops;
+
+  /// In-app turn-by-turn.
   final VoidCallback onPressed;
+
+  /// Backup: hand the trip to Google Maps.
+  final VoidCallback onGoogleMaps;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -1142,29 +1157,35 @@ class _StartBar extends StatelessWidget {
     child: SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Row(
           children: [
-            FilledButton.icon(
-              onPressed: onPressed,
-              icon: const Icon(Icons.navigation),
-              label: Text(
-                stops == 1
-                    ? 'Start Navigation'
-                    : 'Start Navigation (All Stops)',
-              ),
-            ),
-            if (stops > 10)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text(
-                  'Google Maps takes 10 stops at a time. Start again after them.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13.5, color: Brand.inkSoft),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.navigation),
+                label: Text(
+                  stops == 1
+                      ? 'Start Navigation'
+                      : 'Start Navigation (All Stops)',
                 ),
               ),
+            ),
+            const SizedBox(width: 10),
+            // Backup: hand the trip to Google Maps.
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(56, 56),
+                padding: EdgeInsets.zero,
+              ),
+              onPressed: onGoogleMaps,
+              child: Tooltip(
+                message: stops > 10
+                    ? 'Open in Google Maps (first 10 stops)'
+                    : 'Open in Google Maps',
+                child: const Icon(Icons.map_outlined),
+              ),
+            ),
           ],
         ),
       ),

@@ -44,6 +44,9 @@ class _CollectorRoutesTabState extends State<CollectorRoutesTab> {
     );
   }
 
+  /// Routes cancelled here; hidden at once even if the live list lags.
+  final Set<String> _removed = {};
+
   Future<void> _cancel(RouteSchedule r) async {
     final service = context.read<RouteRepository>();
     if (await confirm(
@@ -53,11 +56,12 @@ class _CollectorRoutesTabState extends State<CollectorRoutesTab> {
           danger: true,
         ) &&
         mounted) {
-      await runWithFeedback(
+      final ok = await runWithFeedback(
         context,
         () => service.delete(r.id),
         successMessage: 'Route cancelled.',
       );
+      if (ok && mounted) setState(() => _removed.add(r.id));
     }
   }
 
@@ -66,7 +70,10 @@ class _CollectorRoutesTabState extends State<CollectorRoutesTab> {
     return StreamBuilder<List<RouteSchedule>>(
       stream: _mine,
       builder: (context, snap) {
-        final mine = snap.data ?? const <RouteSchedule>[];
+        final mine = [
+          for (final r in snap.data ?? const <RouteSchedule>[])
+            if (!_removed.contains(r.id)) r,
+        ];
         return ListView(
           padding: const EdgeInsets.only(bottom: 24),
           children: [
