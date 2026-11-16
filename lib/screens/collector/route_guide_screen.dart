@@ -1044,7 +1044,7 @@ class _StopTile extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${p.amount} · ${p.barangay} · ${p.householdName}',
+                          '${p.amount} · ${p.area} · ${p.householdName}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

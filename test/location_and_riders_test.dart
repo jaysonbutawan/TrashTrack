@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hitchmeup/barangay_locator.dart';
 import 'package:hitchmeup/data/noop_push.dart';
 import 'package:hitchmeup/data/repositories.dart';
 import 'package:hitchmeup/main.dart';
@@ -111,6 +112,57 @@ void main() {
     expect(find.text('Pin set. Collectors will go here.'), findsOneWidget);
   });
 
+  testWidgets('pin in another barangay blocks the post until fixed', (
+    tester,
+  ) async {
+    phoneSize(tester);
+    BarangayLocator.instance = _FakeLocator('Visayan Village');
+    addTearDown(
+      () => BarangayLocator.instance = const OfflineBarangayLocator(),
+    );
+    Future<(GpsFix?, String?)> gps({void Function(GpsFix)? onProgress}) async =>
+        (const GpsFix(_house, 6), null);
+
+    final user = await auth.currentUser().first;
+    await tester.pumpWidget(
+      providers(
+        MaterialApp(
+          theme: buildTheme(),
+          home: Provider<AppUser>.value(
+            value: user!,
+            child: CreatePostScreen(locate: gps),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+    await tester.scrollUntilVisible(
+      find.text('Choose barangay'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.text('Magugpo Poblacion').first);
+    await tester.pump();
+    await tester.tap(find.text('Magugpo Poblacion').first); // followed chip
+    await settle(tester);
+    await tester.scrollUntilVisible(
+      find.text('Adjust Pin'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      find.textContaining('This pin is in Visayan Village, not'),
+      findsOneWidget,
+    );
+
+    // Saying "I live there" switches the barangay and clears the warning.
+    await tester.ensureVisible(find.text('I live in Visayan Village'));
+    await tester.pump();
+    await tester.tap(find.text('I live in Visayan Village'));
+    await settle(tester);
+    expect(find.textContaining('This pin is in'), findsNothing);
+  });
+
   testWidgets('without GPS the user can still set the pin by hand', (
     tester,
   ) async {
@@ -181,4 +233,12 @@ void main() {
       contains('Apokon'),
     );
   });
+}
+
+class _FakeLocator extends BarangayLocator {
+  const _FakeLocator(this.answer);
+  final String answer;
+
+  @override
+  Future<String?> barangayAt(LatLng point) async => answer;
 }

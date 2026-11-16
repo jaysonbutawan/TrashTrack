@@ -6,10 +6,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../barangay_locator.dart';
 import '../../constants.dart';
 import '../../data/repositories.dart';
 import '../../models/app_user.dart';
 import '../../models/post.dart';
+import '../../puroks.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/post_form_widgets.dart';
@@ -46,7 +48,24 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   double _weight = 1;
   PostLabel? _label;
   String? _barangay;
+  String? _purok;
   LatLng? _pin;
+
+  /// Purok choices per barangay (Purok 1–20 until the files load).
+  PurokDirectory _purokList = PurokDirectory.empty;
+
+  /// Barangay the pin is actually in (null = unknown / not checked).
+  String? _pinBarangay;
+  bool _checkingPin = false;
+  Future<void>? _pinCheck;
+  int _pinCheckId = 0;
+
+  /// The pin is in a different barangay than the one chosen.
+  bool get _pinMismatch =>
+      _pin != null &&
+      _barangay != null &&
+      _pinBarangay != null &&
+      _pinBarangay != _barangay;
 
   /// Latest GPS reading, shown as accuracy and passed to the picker.
   GpsFix? _fix;
@@ -70,7 +89,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       _weight = e.weightKg;
       _label = e.label;
       _barangay = e.barangay;
+      _purok = e.purok.isEmpty ? null : e.purok;
       _pin = e.location;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkPin());
       _notes.text = e.notes;
     } else {
       final user = context.read<AppUser>();
@@ -84,7 +105,39 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _locate());
     }
     _notes.addListener(_touch);
+    PurokDirectory.load().then((d) {
+      if (mounted) setState(() => _purokList = d);
+    }, onError: (_) {});
   }
+
+  /// Asks which barangay the pin is in. Only the latest pin counts.
+  void _checkPin() {
+    final pin = _pin;
+    if (pin == null) return;
+    final id = ++_pinCheckId;
+    setState(() => _checkingPin = true);
+    _pinCheck = BarangayLocator.instance
+        .barangayAt(pin)
+        .then(
+          (found) {
+            if (!mounted || id != _pinCheckId) return;
+            setState(() {
+              _pinBarangay = found;
+              _checkingPin = false;
+            });
+          },
+          onError: (_) {
+            if (mounted && id == _pinCheckId) {
+              setState(() => _checkingPin = false);
+            }
+          },
+        );
+  }
+
+  void _setBarangay(String b) => _update(() {
+    if (b != _barangay) _purok = null;
+    _barangay = b;
+  });
 
   @override
   void dispose() {
@@ -142,6 +195,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final (fix, problem) = await widget.locate(onProgress: use);
     if (!mounted) return;
     if (fix != null) use(fix);
+    if (_pinFromGps) _checkPin();
     setState(() {
       _locating = false;
       _locationProblem =
@@ -164,6 +218,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         _pin = picked;
         _pinFromGps = false;
       });
+      _checkPin();
     }
   }
 
@@ -173,24 +228,32 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     _types.isNotEmpty,
     _weight > 0,
     _label != null,
-    _barangay != null,
-    _pin != null,
+    _barangay != null && _purok != null,
+    _pin != null && !_pinMismatch,
   ];
 
   String? _missing() {
-    const messages = [
+    final messages = [
       'Please add a photo.',
       'Please choose at least one type.',
       'Please set the weight.',
       'Please choose For Sale or Free.',
-      'Please choose your barangay.',
-      'Please place the pin on the map.',
+      _barangay == null
+          ? 'Please choose your barangay.'
+          : 'Please choose your purok.',
+      _pinMismatch
+          ? 'Your pin is in $_pinBarangay, not $_barangay. Move the pin '
+                'inside $_barangay or change the barangay.'
+          : 'Please place the pin on the map.',
     ];
     final i = _done.indexOf(false);
     return i < 0 ? null : messages[i];
   }
 
   Future<void> _submit() async {
+    // Finish checking where the pin is before deciding.
+    if (_checkingPin) await _pinCheck;
+    if (!mounted) return;
     final problem = _missing();
     if (problem != null) {
       showMessage(ScaffoldMessenger.of(context), problem, error: true);
@@ -214,6 +277,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       weightKg: _weight,
       location: _pin!,
       barangay: _barangay!,
+      purok: _purok!,
       label: _label!,
       notes: _notes.text,
     );
@@ -442,6 +506,21 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             ),
           ],
         ),
+        if (_checkingPin && pin != null && _barangay != null)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              'Checking the pin is inside your barangay…',
+              style: TextStyle(fontSize: 14, color: Brand.inkSoft),
+            ),
+          ),
+        if (_pinMismatch)
+          _PinOutsideBarangay(
+            pinBarangay: _pinBarangay!,
+            chosen: _barangay!,
+            onAdjust: _adjustPin,
+            onSwitch: () => _setBarangay(_pinBarangay!),
+          ),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -526,12 +605,26 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             ),
             _StepCard(
               n: 5,
-              title: 'Barangay',
+              title: 'Barangay & Purok',
               done: done[4],
-              child: BarangayField(
-                value: _barangay,
-                followed: user.followedBarangays,
-                onChanged: (b) => _update(() => _barangay = b),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  BarangayField(
+                    value: _barangay,
+                    followed: user.followedBarangays,
+                    onChanged: _setBarangay,
+                  ),
+                  const SizedBox(height: 10),
+                  PurokField(
+                    barangay: _barangay,
+                    options: _barangay == null
+                        ? const []
+                        : _purokList.puroksOf(_barangay!),
+                    value: _purok,
+                    onChanged: (p) => _update(() => _purok = p),
+                  ),
+                ],
               ),
             ),
             _StepCard(
@@ -872,4 +965,62 @@ class _SubmitBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "This pin is in Visayan Village, not Apokon." with the two ways out.
+class _PinOutsideBarangay extends StatelessWidget {
+  const _PinOutsideBarangay({
+    required this.pinBarangay,
+    required this.chosen,
+    required this.onAdjust,
+    required this.onSwitch,
+  });
+  final String pinBarangay;
+  final String chosen;
+  final VoidCallback onAdjust;
+  final VoidCallback onSwitch;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(top: 10),
+    padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+    decoration: BoxDecoration(
+      color: Brand.danger.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: Brand.danger.withValues(alpha: 0.5)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.wrong_location, color: Brand.danger),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'This pin is in $pinBarangay, not $chosen. '
+                'Move the pin inside $chosen.',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Brand.danger,
+                ),
+              ),
+            ),
+          ],
+        ),
+        Wrap(
+          alignment: WrapAlignment.end,
+          children: [
+            TextButton(
+              onPressed: onSwitch,
+              child: Text('I live in $pinBarangay'),
+            ),
+            TextButton(onPressed: onAdjust, child: const Text('Move Pin')),
+          ],
+        ),
+      ],
+    ),
+  );
 }

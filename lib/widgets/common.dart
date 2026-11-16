@@ -421,7 +421,7 @@ class PostCard extends StatelessWidget {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             _Meta(Icons.scale, post.amount, strong: true),
-                            _Meta(Icons.place, post.barangay),
+                            _Meta(Icons.place, post.area),
                           ],
                         ),
                         const SizedBox(height: 4),

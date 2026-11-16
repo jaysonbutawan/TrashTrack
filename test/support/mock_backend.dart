@@ -199,6 +199,7 @@ class MockPostRepository implements PostRepository {
         weightKg: input.weightKg,
         location: input.location,
         barangay: input.barangay,
+        purok: input.purok.trim(),
         label: input.label,
         status: PostStatus.available,
         notes: input.notes.trim(),
@@ -229,6 +230,7 @@ class MockPostRepository implements PostRepository {
       weightKg: input.weightKg,
       location: input.location,
       barangay: input.barangay,
+      purok: input.purok.trim(),
       label: input.label,
       notes: input.notes.trim(),
     );

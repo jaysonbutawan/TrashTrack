@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'barangay_locator.dart';
 import 'config.dart';
 import 'data/noop_push.dart';
 import 'data/repositories.dart';
@@ -23,6 +24,7 @@ Future<void> main() async {
 
   final config = await AppConfig.load();
   RoadRouter.instance = RoadRouter.fromKey(config.tomTomApiKey);
+  BarangayLocator.instance = NominatimBarangayLocator();
   if (!config.hasSupabase) {
     runApp(const SetupNeededApp());
     return;

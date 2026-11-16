@@ -520,3 +520,232 @@ class _BarangaySheetState extends State<_BarangaySheet> {
     );
   }
 }
+
+// ───────────────────────────── purok ─────────────────────────────
+
+/// Field under the barangay that opens the barangay's purok list (from the
+/// purok files, or Purok 1–20). Disabled until a barangay is chosen.
+class PurokField extends StatelessWidget {
+  const PurokField({
+    super.key,
+    required this.barangay,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String? barangay;
+  final List<String> options;
+  final String? value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final has = value != null;
+    final enabled = barangay != null;
+    return Material(
+      color: has ? Brand.mint : Brand.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: has ? Brand.forest : Brand.line,
+          width: has ? 2 : 1.5,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: !enabled
+            ? null
+            : () async {
+                final picked = await pickPurok(
+                  context,
+                  barangay: barangay!,
+                  options: options,
+                  selected: value,
+                );
+                if (picked != null) onChanged(picked);
+              },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: has ? Brand.forest : Brand.paper,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.signpost_outlined,
+                  color: has ? Colors.white : Brand.inkSoft,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      has
+                          ? 'Purok'
+                          : enabled
+                          ? 'Choose purok'
+                          : 'Choose the barangay first',
+                      style: TextStyle(
+                        fontSize: has ? 14 : 18,
+                        color: Brand.inkSoft,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (has)
+                      Text(
+                        value!,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Brand.ink,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Icon(Icons.search, color: enabled ? Brand.inkSoft : Brand.line),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Searchable list of one barangay's puroks. Typing a name that is not in
+/// the list offers it as "Use …".
+Future<String?> pickPurok(
+  BuildContext context, {
+  required String barangay,
+  required List<String> options,
+  String? selected,
+}) => showModalBottomSheet<String>(
+  context: context,
+  isScrollControlled: true,
+  showDragHandle: true,
+  builder: (_) =>
+      _PurokPicker(barangay: barangay, options: options, selected: selected),
+);
+
+class _PurokPicker extends StatefulWidget {
+  const _PurokPicker({
+    required this.barangay,
+    required this.options,
+    required this.selected,
+  });
+  final String barangay;
+  final List<String> options;
+  final String? selected;
+
+  @override
+  State<_PurokPicker> createState() => _PurokPickerState();
+}
+
+class _PurokPickerState extends State<_PurokPicker> {
+  String _query = '';
+
+  /// "abaca" → "Purok Abaca"; keeps "Sitio …" as typed.
+  String get _typed {
+    final q = _query.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (RegExp(r'^(purok|sitio)\b', caseSensitive: false).hasMatch(q)) {
+      return q[0].toUpperCase() + q.substring(1);
+    }
+    return 'Purok $q';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _query.trim().toLowerCase();
+    final shown = [
+      for (final p in widget.options)
+        if (q.isEmpty || p.toLowerCase().contains(q)) p,
+    ];
+    final offerTyped =
+        q.isNotEmpty &&
+        !widget.options.any((p) => p.toLowerCase() == _typed.toLowerCase());
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.75,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Text(
+                'Purok in ${widget.barangay}',
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                  color: Brand.ink,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                autofocus: false,
+                style: const TextStyle(fontSize: 18),
+                textCapitalization: TextCapitalization.words,
+                onChanged: (v) => setState(() => _query = v),
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Search or type your purok',
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: ListView(
+                children: [
+                  if (offerTyped)
+                    ListTile(
+                      leading: const Icon(Icons.add_location_alt),
+                      title: Text(
+                        'Use "$_typed"',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      onTap: () => Navigator.pop(context, _typed),
+                    ),
+                  for (final p in shown)
+                    ListTile(
+                      leading: Icon(
+                        p == widget.selected
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: p == widget.selected
+                            ? Brand.forest
+                            : Brand.inkSoft,
+                      ),
+                      title: Text(
+                        p,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: p == widget.selected
+                              ? FontWeight.w800
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      onTap: () => Navigator.pop(context, p),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

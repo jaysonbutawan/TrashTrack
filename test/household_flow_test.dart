@@ -139,9 +139,23 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.text('Magugpo Poblacion').first);
+    await tester.pump();
     await tester.tap(find.text('Magugpo Poblacion').first); // followed chip
     await tester.pump();
+    // Barangay alone is not enough: the purok is part of the step.
+    expect(find.text('2 of 6 done'), findsOneWidget);
+    await tester.ensureVisible(find.text('Choose purok'));
+    await tester.pump();
+    await tester.tap(find.text('Choose purok'));
+    await settle(tester);
+    expect(find.text('Purok in Magugpo Poblacion'), findsOneWidget);
+    await tester.tap(find.text('Purok 3'));
+    await settle(tester);
     expect(find.text('3 of 6 done'), findsOneWidget);
+
+    await tester.ensureVisible(find.byIcon(Icons.search).first);
+    await tester.pump();
     await tester.tap(find.byIcon(Icons.search).first);
     await settle(tester);
     expect(find.text('Which barangay?'), findsOneWidget);
@@ -150,5 +164,8 @@ void main() {
     await tester.tap(find.text('Apokon'));
     await settle(tester);
     expect(find.text('Apokon'), findsOneWidget);
+    // A purok of the old barangay does not carry over.
+    expect(find.text('Purok 3'), findsNothing);
+    expect(find.text('Choose purok'), findsOneWidget);
   });
 }

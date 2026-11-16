@@ -124,6 +124,8 @@ class PostDetailScreen extends StatelessWidget {
                     const SizedBox(height: 8),
                     _Info(Icons.scale, 'Weight', post.amount),
                     _Info(Icons.place, 'Barangay', post.barangay),
+                    if (post.purok.isNotEmpty)
+                      _Info(Icons.signpost_outlined, 'Purok', post.purok),
                     _Info(Icons.person, 'Household', post.householdName),
                     if (post.notes.isNotEmpty)
                       _Info(Icons.notes, 'Notes', post.notes),

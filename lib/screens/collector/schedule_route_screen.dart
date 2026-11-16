@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../constants.dart';
 import '../../data/repositories.dart';
 import '../../models/route_schedule.dart';
+import '../../puroks.dart';
 import '../../route_planner.dart';
 import '../../theme.dart';
 import '../../widgets/barangay_demand.dart';
@@ -27,6 +28,9 @@ class _ScheduleRouteScreenState extends State<ScheduleRouteScreen> {
 
   /// Chosen puroks per barangay; none = the whole barangay.
   final Map<String, List<String>> _puroks = {};
+
+  /// Purok names per barangay from the purok files (numbered until loaded).
+  PurokDirectory _purokList = PurokDirectory.empty;
   final _note = TextEditingController();
 
   /// What is waiting in each barangay, busiest first (empty until loaded).
@@ -36,6 +40,9 @@ class _ScheduleRouteScreenState extends State<ScheduleRouteScreen> {
   void initState() {
     super.initState();
     _loadDemand();
+    PurokDirectory.load().then((d) {
+      if (mounted) setState(() => _purokList = d);
+    }, onError: (_) {});
   }
 
   Future<void> _loadDemand() async {
@@ -150,7 +157,11 @@ class _ScheduleRouteScreenState extends State<ScheduleRouteScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _PurokSheet(barangay: b, initial: _puroks[b] ?? const []),
+      builder: (_) => _PurokSheet(
+        barangay: b,
+        options: _purokList.puroksOf(b),
+        initial: _puroks[b] ?? const [],
+      ),
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -319,11 +330,19 @@ class _ScheduleRouteScreenState extends State<ScheduleRouteScreen> {
   }
 }
 
-/// Pick puroks of one barangay: numbered chips plus named ones the collector
-/// types (some puroks have names, e.g. "Purok Mabuhay"). None = whole barangay.
+/// Pick puroks of one barangay: its list from the purok files (or Purok
+/// 1–20 when it has none), plus any the collector types. None = whole
+/// barangay.
 class _PurokSheet extends StatefulWidget {
-  const _PurokSheet({required this.barangay, required this.initial});
+  const _PurokSheet({
+    required this.barangay,
+    required this.options,
+    required this.initial,
+  });
   final String barangay;
+
+  /// Known puroks of this barangay, in order.
+  final List<String> options;
   final List<String> initial;
 
   @override
@@ -331,17 +350,14 @@ class _PurokSheet extends StatefulWidget {
 }
 
 class _PurokSheetState extends State<_PurokSheet> {
-  static const _numbered = 20;
   late final List<String> _chosen = [...widget.initial];
-  late final List<String> _named = [
+
+  /// Typed by the collector (not in the barangay's list).
+  late final List<String> _extra = [
     for (final p in widget.initial)
-      if (!_isNumbered(p)) p,
+      if (!widget.options.contains(p)) p,
   ];
   final _custom = TextEditingController();
-
-  static String _label(int n) => 'Purok $n';
-  static bool _isNumbered(String p) =>
-      RegExp(r'^Purok ([1-9]|1[0-9]|20)$').hasMatch(p);
 
   @override
   void dispose() {
@@ -355,22 +371,28 @@ class _PurokSheetState extends State<_PurokSheet> {
   void _addCustom() {
     var name = _custom.text.trim();
     if (name.isEmpty) return;
-    if (!name.toLowerCase().startsWith('purok')) name = 'Purok $name';
+    if (!RegExp(r'^(purok|sitio)\b', caseSensitive: false).hasMatch(name)) {
+      name = 'Purok $name';
+    }
+    // Match an existing option typed in another case ("purok abaca").
+    name = widget.options.firstWhere(
+      (o) => o.toLowerCase() == name.toLowerCase(),
+      orElse: () => name,
+    );
     setState(() {
-      if (!_named.contains(name) && !_isNumbered(name)) _named.add(name);
+      if (!widget.options.contains(name) && !_extra.contains(name)) {
+        _extra.add(name);
+      }
       if (!_chosen.contains(name)) _chosen.add(name);
       _custom.clear();
     });
   }
 
-  /// Numbered first (in order), then named ones as added.
+  /// In list order, then typed ones as added.
   List<String> get _sorted {
-    int key(String p) {
-      final m = RegExp(r'^Purok (\d+)$').firstMatch(p);
-      return m == null ? 1000 : int.parse(m.group(1)!);
-    }
-
-    return [..._chosen]..sort((a, b) => key(a).compareTo(key(b)));
+    final order = [...widget.options, ..._extra];
+    return [..._chosen]
+      ..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
   }
 
   Widget _chip(String p) => FilterChip(
@@ -421,8 +443,8 @@ class _PurokSheetState extends State<_PurokSheet> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (var n = 1; n <= _numbered; n++) _chip(_label(n)),
-                  for (final p in _named) _chip(p),
+                  for (final p in widget.options) _chip(p),
+                  for (final p in _extra) _chip(p),
                 ],
               ),
               const SizedBox(height: 14),

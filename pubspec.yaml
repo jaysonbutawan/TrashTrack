@@ -72,6 +72,24 @@ flutter:
   # Supabase / Google keys (copy .env.example to .env).
   assets:
     - .env
+    # Puroks per barangay (see lib/puroks.dart). Empty file = Purok 1–20.
+    - apokon.md
+    - bincungan.md
+    - canacotan.md
+    - cuambogan.md
+    - lafilipina.md
+    - libuganon.md
+    - madaum.md
+    - magdum.md
+    - magugpo-east.md
+    - magugpo-north.md
+    - magugpo-south.md
+    - magugpo-west.md
+    - mankilam.md
+    - nuevafuerza.md
+    - pagsabangan.md
+    - sanmiguel.md
+    - Visayan-village.md
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

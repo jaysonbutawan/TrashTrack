@@ -49,6 +49,7 @@ create table public.posts (
   lat              double precision not null check (lat between 7.33 and 7.58),
   lng              double precision not null check (lng between 125.68 and 125.93),
   barangay         text not null,
+  purok            text not null default '' check (length(purok) <= 60),
   label            text not null check (label in ('for_sale', 'free')),
   status           text not null default 'available'
                    check (status in ('available', 'reserved', 'collected')),
@@ -176,7 +177,8 @@ create policy "households edit own available posts"
   using (household_id = auth.uid() and status = 'available')
   with check (household_id = auth.uid() and status = 'available');
 revoke update on public.posts from authenticated, anon;
-grant update (photo_url, types, weight_kg, lat, lng, barangay, label, notes)
+grant update (photo_url, types, weight_kg, lat, lng, barangay, purok, label,
+              notes)
   on public.posts to authenticated;
 create policy "households delete own available posts"
   on public.posts for delete to authenticated

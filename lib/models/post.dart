@@ -54,6 +54,7 @@ class RecyclablePost {
     required this.status,
     required this.createdAt,
     this.notes = '',
+    this.purok = '',
     this.reservedBy,
     this.reservedByName,
     this.reservedAt,
@@ -78,6 +79,9 @@ class RecyclablePost {
   final PostStatus status;
   final DateTime createdAt;
   final String notes;
+
+  /// Purok within [barangay]; empty on older posts.
+  final String purok;
   final String? reservedBy;
   final String? reservedByName;
   final DateTime? reservedAt;
@@ -85,6 +89,9 @@ class RecyclablePost {
 
   /// 1–5 stars the household gave the collector; null until rated.
   final int? rating;
+
+  /// "Apokon · Purok 3", or just the barangay on older posts.
+  String get area => purok.isEmpty ? barangay : '$barangay · $purok';
 
   String get amount => '~${formatKg(weightKg)}';
   String get typesLabel => types.map((t) => t.label).join(', ');
@@ -97,6 +104,7 @@ class RecyclablePost {
   String get searchText => [
     typesLabel,
     barangay,
+    purok,
     notes,
     reservedByName ?? '',
     label.label,
@@ -109,6 +117,7 @@ class RecyclablePost {
     double? weightKg,
     LatLng? location,
     String? barangay,
+    String? purok,
     PostLabel? label,
     String? notes,
     PostStatus? status,
@@ -127,6 +136,7 @@ class RecyclablePost {
     weightKg: weightKg ?? this.weightKg,
     location: location ?? this.location,
     barangay: barangay ?? this.barangay,
+    purok: purok ?? this.purok,
     label: label ?? this.label,
     status: status ?? this.status,
     createdAt: createdAt,
@@ -158,6 +168,7 @@ class RecyclablePost {
       (m['lng'] as num).toDouble(),
     ),
     barangay: m['barangay'] as String? ?? '',
+    purok: m['purok'] as String? ?? '',
     label: PostLabel.fromDb(m['label'] as String?),
     status: PostStatus.fromName(m['status'] as String?),
     createdAt: _date(m['created_at'])!,
@@ -181,6 +192,7 @@ class NewPost {
     required this.label,
     this.photoPath,
     this.notes = '',
+    this.purok = '',
   });
 
   /// Local file path of a new photo to upload. Null when editing and the
@@ -190,6 +202,7 @@ class NewPost {
   final double weightKg;
   final LatLng location;
   final String barangay;
+  final String purok;
   final PostLabel label;
   final String notes;
 
@@ -200,6 +213,7 @@ class NewPost {
     'lat': location.latitude,
     'lng': location.longitude,
     'barangay': barangay,
+    'purok': purok.trim(),
     'label': label.dbValue,
     'notes': notes.trim(),
   };
