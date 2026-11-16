@@ -369,16 +369,24 @@ class _PurokSheetState extends State<_PurokSheet> {
       setState(() => _chosen.contains(p) ? _chosen.remove(p) : _chosen.add(p));
 
   void _addCustom() {
-    var name = _custom.text.trim();
+    var name = _custom.text.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (name.isEmpty) return;
-    if (!RegExp(r'^(purok|sitio)\b', caseSensitive: false).hasMatch(name)) {
+    // An existing option typed loosely: "jalandoni", "abaca", "purok abaca".
+    final typed = name.toLowerCase();
+    final known = widget.options.where(
+      (o) =>
+          o.toLowerCase() == typed ||
+          o.toLowerCase() == 'purok $typed' ||
+          'purok ${o.toLowerCase()}' == typed,
+    );
+    if (known.isNotEmpty) {
+      name = known.first;
+    } else if (!RegExp(
+      r'^(purok|sitio)\b',
+      caseSensitive: false,
+    ).hasMatch(name)) {
       name = 'Purok $name';
     }
-    // Match an existing option typed in another case ("purok abaca").
-    name = widget.options.firstWhere(
-      (o) => o.toLowerCase() == name.toLowerCase(),
-      orElse: () => name,
-    );
     setState(() {
       if (!widget.options.contains(name) && !_extra.contains(name)) {
         _extra.add(name);

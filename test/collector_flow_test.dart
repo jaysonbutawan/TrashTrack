@@ -104,13 +104,22 @@ void main() {
     await tester.tap(find.text('Choose Purok').first);
     await settle(tester);
     expect(find.textContaining('Puroks in'), findsOneWidget);
-    Finder chip(String n) =>
-        find.descendant(of: find.byType(FilterChip), matching: find.text(n));
-    await tester.tap(chip('1'));
-    await tester.tap(chip('3'));
+    // Whatever the barangay's list is, take its first two puroks.
+    final chips = find.byType(FilterChip);
+    String label(int i) => tester
+        .widget<Text>(
+          find.descendant(of: chips.at(i), matching: find.byType(Text)).first,
+        )
+        .data!;
+    final first = label(0), second = label(1);
+    await tester.tap(chips.at(0));
+    await tester.tap(chips.at(1));
+    await tester.pump();
+    // Long lists (Visayan Village has 38) push the button below the fold.
+    await tester.ensureVisible(find.text('Done (2 puroks)'));
     await tester.pump();
     await tester.tap(find.text('Done (2 puroks)'));
     await settle(tester);
-    expect(find.text('Purok 1, 3'), findsOneWidget);
+    expect(find.textContaining('$first, $second'), findsOneWidget);
   });
 }

@@ -532,10 +532,14 @@ class PurokField extends StatelessWidget {
     required this.options,
     required this.value,
     required this.onChanged,
+    this.notes = const {},
   });
 
   final String? barangay;
   final List<String> options;
+
+  /// Hints shown under a purok in the list ("Santol").
+  final Map<String, String> notes;
   final String? value;
   final ValueChanged<String> onChanged;
 
@@ -561,6 +565,7 @@ class PurokField extends StatelessWidget {
                   context,
                   barangay: barangay!,
                   options: options,
+                  notes: notes,
                   selected: value,
                 );
                 if (picked != null) onChanged(picked);
@@ -625,23 +630,30 @@ Future<String?> pickPurok(
   BuildContext context, {
   required String barangay,
   required List<String> options,
+  Map<String, String> notes = const {},
   String? selected,
 }) => showModalBottomSheet<String>(
   context: context,
   isScrollControlled: true,
   showDragHandle: true,
-  builder: (_) =>
-      _PurokPicker(barangay: barangay, options: options, selected: selected),
+  builder: (_) => _PurokPicker(
+    barangay: barangay,
+    options: options,
+    notes: notes,
+    selected: selected,
+  ),
 );
 
 class _PurokPicker extends StatefulWidget {
   const _PurokPicker({
     required this.barangay,
     required this.options,
+    required this.notes,
     required this.selected,
   });
   final String barangay;
   final List<String> options;
+  final Map<String, String> notes;
   final String? selected;
 
   @override
@@ -654,6 +666,7 @@ class _PurokPickerState extends State<_PurokPicker> {
   /// "abaca" → "Purok Abaca"; keeps "Sitio …" as typed.
   String get _typed {
     final q = _query.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (q.isEmpty) return q;
     if (RegExp(r'^(purok|sitio)\b', caseSensitive: false).hasMatch(q)) {
       return q[0].toUpperCase() + q.substring(1);
     }
@@ -665,11 +678,18 @@ class _PurokPickerState extends State<_PurokPicker> {
     final q = _query.trim().toLowerCase();
     final shown = [
       for (final p in widget.options)
-        if (q.isEmpty || p.toLowerCase().contains(q)) p,
+        if (q.isEmpty ||
+            p.toLowerCase().contains(q) ||
+            (widget.notes[p] ?? '').toLowerCase().contains(q))
+          p,
     ];
+    // Offer the typed name only when it is not already in the list.
     final offerTyped =
         q.isNotEmpty &&
-        !widget.options.any((p) => p.toLowerCase() == _typed.toLowerCase());
+        !widget.options.any(
+          (p) =>
+              p.toLowerCase() == q || p.toLowerCase() == _typed.toLowerCase(),
+        );
     return SizedBox(
       height: MediaQuery.of(context).size.height * 0.75,
       child: Padding(
@@ -738,6 +758,15 @@ class _PurokPickerState extends State<_PurokPicker> {
                               : FontWeight.w500,
                         ),
                       ),
+                      subtitle: (widget.notes[p] ?? '').isEmpty
+                          ? null
+                          : Text(
+                              widget.notes[p]!,
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                color: Brand.inkSoft,
+                              ),
+                            ),
                       onTap: () => Navigator.pop(context, p),
                     ),
                 ],

@@ -621,6 +621,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     options: _barangay == null
                         ? const []
                         : _purokList.puroksOf(_barangay!),
+                    notes: _barangay == null
+                        ? const {}
+                        : {
+                            for (final p in _purokList.puroksOf(_barangay!))
+                              p: _purokList.noteOf(_barangay!, p),
+                          },
                     value: _purok,
                     onChanged: (p) => _update(() => _purok = p),
                   ),
