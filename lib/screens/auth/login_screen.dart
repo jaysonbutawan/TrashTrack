@@ -11,7 +11,7 @@ import '../../theme.dart';
 import '../../widgets/brand_splash.dart';
 import '../../widgets/common.dart';
 import '../../widgets/recyclable_style.dart';
-import '../../widgets/role_card.dart';
+import '../../widgets/role_card.dart' show GoogleMark, RoleText;
 
 /// Pick Household or Collector, then Google's one-tap account sheet opens.
 /// Google is the only way in: every account has an email Google already
@@ -24,6 +24,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  /// Role tapped; Google sign-in starts from the button below.
+  UserRole? _role;
   UserRole? _busy;
 
   Future<void> _signIn(UserRole role) async {
@@ -84,42 +86,39 @@ class _LoginScreenState extends State<LoginScreen> {
                         children: [
                           const Text(
                             'Who are you?',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 25,
+                              fontSize: 24,
                               fontWeight: FontWeight.w900,
                               color: Brand.ink,
                             ),
                           ),
-                          const SizedBox(height: 14),
-                          for (final role in UserRole.values) ...[
-                            RoleCard(
-                              role: role,
-                              busy: _busy == role,
-                              onTap: _busy == null ? () => _signIn(role) : null,
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                          const Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          const SizedBox(height: 16),
+                          Row(
                             children: [
-                              Icon(
-                                Icons.verified_user,
-                                size: 19,
-                                color: Brand.leaf,
-                              ),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Only verified Google accounts can join. '
-                                  'Already have an account? Tap either one.',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Brand.inkSoft,
+                              for (final role in UserRole.values) ...[
+                                if (role != UserRole.values.first)
+                                  const SizedBox(width: 12),
+                                Expanded(
+                                  child: _RoleTile(
+                                    role: role,
+                                    selected: _role == role,
+                                    onTap: _busy == null
+                                        ? () => setState(() => _role = role)
+                                        : null,
                                   ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
+                          const SizedBox(height: 18),
+                          _GoogleButton(
+                            role: _role,
+                            onPressed: _role == null || _busy != null
+                                ? null
+                                : () => _signIn(_role!),
+                          ),
+                          const SizedBox(height: 6),
                         ],
                       ),
                     ),
@@ -145,6 +144,149 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Square choice: big icon and one word. Fills with the role color when
+/// picked.
+class _RoleTile extends StatelessWidget {
+  const _RoleTile({
+    required this.role,
+    required this.selected,
+    required this.onTap,
+  });
+  final UserRole role;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = role == UserRole.household ? Brand.forest : Brand.kraft;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: role.title,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: selected ? accent : Brand.card,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: selected ? accent : Brand.line, width: 2),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.35),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
+              : null,
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(22),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 22),
+              child: Column(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? Colors.white.withValues(alpha: 0.18)
+                              : accent.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          role.icon,
+                          size: 36,
+                          color: selected ? Colors.white : accent,
+                        ),
+                      ),
+                      if (selected)
+                        const Positioned(
+                          right: -4,
+                          top: -4,
+                          child: CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Colors.white,
+                            child: Icon(
+                              Icons.check,
+                              size: 17,
+                              color: Brand.ink,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    role.title,
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                      color: selected ? Colors.white : Brand.ink,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Continue with Google" — greyed out until a role is picked.
+class _GoogleButton extends StatelessWidget {
+  const _GoogleButton({required this.role, required this.onPressed});
+  final UserRole? role;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = role == UserRole.collector ? Brand.kraft : Brand.forest;
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        backgroundColor: accent,
+        disabledBackgroundColor: Brand.line,
+        disabledForegroundColor: Brand.inkSoft,
+        minimumSize: const Size.fromHeight(58),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      onPressed: onPressed,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: onPressed == null ? Colors.white70 : Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: const GoogleMark(size: 20),
+          ),
+          const SizedBox(width: 12),
+          const Flexible(
+            child: Text(
+              'Continue with Google',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
       ),
     );
   }

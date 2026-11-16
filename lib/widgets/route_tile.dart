@@ -109,7 +109,7 @@ class RouteTile extends StatelessWidget {
                             ),
                           ),
                           child: Text(
-                            b,
+                            route.areaLabel(b),
                             style: TextStyle(
                               fontSize: 14.5,
                               fontWeight: highlight.contains(b)

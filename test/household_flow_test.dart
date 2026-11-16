@@ -59,7 +59,13 @@ void main() {
   ) async {
     await pumpApp(tester, as: null);
     expect(find.text('Who are you?'), findsOneWidget);
-    await tester.tap(find.text("I'm a Collector"));
+    // Nothing happens until a role is picked.
+    await tester.tap(find.text('Continue with Google'));
+    await settle(tester);
+    expect(find.text('Who are you?'), findsOneWidget);
+    await tester.tap(find.text('Collector'));
+    await tester.pump();
+    await tester.tap(find.text('Continue with Google'));
     await settle(tester);
     await settle(tester);
     final me = await auth.currentUser().first;
@@ -70,7 +76,9 @@ void main() {
 
   testWidgets('household home: search, Past tab, filters', (tester) async {
     await pumpApp(tester);
-    await tester.tap(find.text("I'm a Household"));
+    await tester.tap(find.text('Household'));
+    await tester.pump();
+    await tester.tap(find.text('Continue with Google'));
     await settle(tester);
 
     expect(find.textContaining('Maria'), findsWidgets);
@@ -102,7 +110,9 @@ void main() {
     tester,
   ) async {
     await pumpApp(tester);
-    await tester.tap(find.text("I'm a Household"));
+    await tester.tap(find.text('Household'));
+    await tester.pump();
+    await tester.tap(find.text('Continue with Google'));
     await settle(tester);
     await tester.tap(find.text('Post Recyclables'));
     await settle(tester);

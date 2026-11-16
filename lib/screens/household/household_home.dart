@@ -1515,11 +1515,35 @@ class _RiderCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (r.puroksIn(barangay).isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.signpost_outlined,
+                            size: 17,
+                            color: Brand.forest,
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'Only ${purokSummary(r.puroksIn(barangay))}',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: Brand.forest,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (others.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 3),
                       child: Text(
-                        'Also passing ${others.join(', ')}',
+                        'Also passing ${others.map(r.areaLabel).join(', ')}',
                         style: const TextStyle(
                           fontSize: 14,
                           color: Brand.inkSoft,

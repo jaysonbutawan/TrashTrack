@@ -98,5 +98,19 @@ void main() {
     await settle(tester);
     expect(find.textContaining('(3 chosen)'), findsOneWidget);
     expect(find.textContaining('waiting'), findsWidgets);
+
+    // Narrow the first ticked barangay down to two puroks.
+    expect(find.text('Whole barangay'), findsWidgets);
+    await tester.tap(find.text('Choose Purok').first);
+    await settle(tester);
+    expect(find.textContaining('Puroks in'), findsOneWidget);
+    Finder chip(String n) =>
+        find.descendant(of: find.byType(FilterChip), matching: find.text(n));
+    await tester.tap(chip('1'));
+    await tester.tap(chip('3'));
+    await tester.pump();
+    await tester.tap(find.text('Done (2 puroks)'));
+    await settle(tester);
+    expect(find.text('Purok 1, 3'), findsOneWidget);
   });
 }

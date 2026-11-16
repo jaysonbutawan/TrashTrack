@@ -4,10 +4,7 @@ import 'package:hitchmeup/data/noop_push.dart';
 import 'package:hitchmeup/data/repositories.dart';
 import 'package:hitchmeup/main.dart';
 import 'package:hitchmeup/models/app_user.dart';
-import 'package:hitchmeup/screens/common/profile_tab.dart';
-import 'package:hitchmeup/theme.dart';
 import 'package:hitchmeup/widgets/common.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'support/mock_backend.dart';
@@ -50,10 +47,10 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 1));
     await tester.tap(
-      find.text(
-        role == UserRole.collector ? "I'm a Collector" : "I'm a Household",
-      ),
+      find.text(role == UserRole.collector ? 'Collector' : 'Household'),
     );
+    await tester.pump();
+    await tester.tap(find.text('Continue with Google'));
     await settle(tester);
   }
 
@@ -116,48 +113,7 @@ void main() {
     await tester.tap(find.text('Save'));
     await settle(tester);
     expect(store.currentUser!.phone, '09981234567');
-  });
-
-  testWidgets('collector: current location on the profile', (tester) async {
-    phoneSize(tester);
-    store = MockStore();
-    auth = MockAuthRepository(store)..signInAs(UserRole.collector);
-    final user = store.currentUser!;
-    var calls = 0;
-    Future<(LatLng?, String?)> fakeLocate() async {
-      calls++;
-      return calls == 1
-          ? (null, 'Please turn on Location (GPS).')
-          : (const LatLng(7.4478, 125.8078), null);
-    }
-
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ...providers(),
-          Provider<AppUser>.value(value: user),
-        ],
-        child: MaterialApp(
-          theme: buildTheme(),
-          home: ProfileTab(user: user, locate: fakeLocate),
-        ),
-      ),
-    );
-    final getLocation = find.text('Get My Current Location');
-    await tester.scrollUntilVisible(
-      getLocation,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(getLocation);
-    await settle(tester);
-    expect(find.text('Please turn on Location (GPS).'), findsOneWidget);
-
-    await tester.tap(getLocation);
-    await settle(tester);
-    expect(find.text('7.44780, 125.80780'), findsOneWidget);
-    expect(find.text('Update Location'), findsOneWidget);
-    expect(find.text('Guide Me to My Pickups'), findsOneWidget);
+    expect(find.text('Get My Current Location'), findsNothing);
   });
 }
 

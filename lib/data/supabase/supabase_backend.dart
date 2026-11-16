@@ -462,6 +462,7 @@ class SupabaseRouteRepository implements RouteRepository {
     required DateTime startTime,
     required List<String> barangays,
     String note = '',
+    Map<String, List<String>> puroks = const {},
   }) => _guard(
     // collector_name is filled by a database trigger.
     () => _db.from('routes').insert({
@@ -469,6 +470,10 @@ class SupabaseRouteRepository implements RouteRepository {
       'start_time': startTime.toUtc().toIso8601String(),
       'barangays': barangays,
       'note': note.trim(),
+      'puroks': {
+        for (final e in puroks.entries)
+          if (e.value.isNotEmpty && barangays.contains(e.key)) e.key: e.value,
+      },
     }),
   );
 

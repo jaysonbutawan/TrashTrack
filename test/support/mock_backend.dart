@@ -355,6 +355,7 @@ class MockRouteRepository implements RouteRepository {
     required DateTime startTime,
     required List<String> barangays,
     String note = '',
+    Map<String, List<String>> puroks = const {},
   }) async {
     await Future<void>.delayed(_latency);
     final user = _s.requireUser();
@@ -366,6 +367,10 @@ class MockRouteRepository implements RouteRepository {
         startTime: startTime,
         barangays: barangays,
         note: note.trim(),
+        puroks: {
+          for (final e in puroks.entries)
+            if (e.value.isNotEmpty && barangays.contains(e.key)) e.key: e.value,
+        },
       ),
     );
     _s.notify();

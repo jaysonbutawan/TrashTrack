@@ -98,6 +98,8 @@ create table public.routes (
   start_time     timestamptz not null,
   barangays      text[] not null check (cardinality(barangays) > 0),
   note           text not null default '',
+  -- {"Apokon": ["Purok 1", "Purok 3"]}; a barangay not listed = whole barangay
+  puroks         jsonb not null default '{}'::jsonb,
   created_at     timestamptz not null default now()
 );
 

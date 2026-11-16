@@ -104,10 +104,13 @@ abstract class RouteRepository {
 
   /// Supabase: insert into `routes`. A database webhook / Edge Function then
   /// pushes an alert to households following those barangays.
+  /// [puroks] narrows a barangay to some of its puroks (jsonb column
+  /// `puroks`); a barangay not in it is visited whole.
   Future<void> schedule({
     required DateTime startTime,
     required List<String> barangays,
     String note = '',
+    Map<String, List<String>> puroks = const {},
   });
 
   /// Supabase: delete from `routes` (RLS: owner only).

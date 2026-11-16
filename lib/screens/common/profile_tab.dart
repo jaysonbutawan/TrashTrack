@@ -1,39 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:provider/provider.dart' hide Locator;
-import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
-import '../../constants.dart';
 import '../../data/repositories.dart';
 import '../../models/app_user.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/post_form_widgets.dart';
 import '../../widgets/role_card.dart';
-import '../../widgets/tagum_map.dart';
-import '../collector/route_guide_screen.dart';
 import '../household/follow_barangays_screen.dart';
 
 /// Profile tab for both roles: who you are, your details, log out.
 ///
 /// Household: home barangay, mobile number, route alerts.
-/// Collector: name, mobile number, and current location with a shortcut to
-/// the Route Guide.
+/// Collector: name and mobile number.
 class ProfileTab extends StatelessWidget {
-  const ProfileTab({
-    super.key,
-    required this.user,
-    this.showAppBar = true,
-    this.locate = currentLocation,
-  });
+  const ProfileTab({super.key, required this.user, this.showAppBar = true});
 
   final AppUser user;
 
   /// False when the parent screen already shows an app bar (collector home).
   final bool showAppBar;
-
-  /// Replaceable in tests (the real one needs the GPS plugin).
-  final Locator locate;
 
   @override
   Widget build(BuildContext context) {
@@ -97,11 +83,6 @@ class ProfileTab extends StatelessWidget {
                 onTap: () => _openFollow(context),
               ),
             ],
-          ),
-        if (user.isCollector)
-          _Section(
-            title: 'My current location',
-            children: [_LocationCard(locate: locate)],
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
@@ -480,174 +461,6 @@ class _Row extends StatelessWidget {
               TextButton(onPressed: onTap, child: Text(action!)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── collector: current location ──
-
-class _LocationCard extends StatefulWidget {
-  const _LocationCard({required this.locate});
-  final Locator locate;
-
-  @override
-  State<_LocationCard> createState() => _LocationCardState();
-}
-
-class _LocationCardState extends State<_LocationCard> {
-  LatLng? _me;
-  String? _problem;
-  DateTime? _at;
-  bool _locating = false;
-
-  Future<void> _locate() async {
-    setState(() {
-      _locating = true;
-      _problem = null;
-    });
-    LatLng? loc;
-    String? problem;
-    try {
-      (loc, problem) = await widget.locate();
-      if (loc != null && !isInsideTagum(loc)) {
-        loc = null;
-        problem = 'You are outside Tagum City.';
-      }
-    } catch (_) {
-      problem = 'Could not get your location.';
-    }
-    if (!mounted) return;
-    setState(() {
-      _locating = false;
-      _problem = problem;
-      if (loc != null) {
-        _me = loc;
-        _at = DateTime.now();
-      }
-    });
-  }
-
-  void _openGuide() {
-    final user = context.read<AppUser>();
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => Provider.value(
-          value: user,
-          child: RouteGuideScreen(locate: widget.locate),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final me = _me;
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (me != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: SizedBox(
-                height: 190,
-                child: TagumMap(
-                  // New map each time so it re-centers on the new position.
-                  key: ValueKey(me),
-                  initialCenter: me,
-                  initialZoom: 16,
-                  markers: [MyLocationDot.marker(me)],
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(Icons.my_location, color: Color(0xFF1A73E8)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${me.latitude.toStringAsFixed(5)}, '
-                        '${me.longitude.toStringAsFixed(5)}',
-                        style: const TextStyle(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        'Updated ${DateFormat.jm().format(_at!)}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Brand.inkSoft,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ] else
-            const Text(
-              'Find where you are now, then let the Route Guide plan the '
-              'shortest way to your reserved pickups.',
-              style: TextStyle(fontSize: 16, color: Brand.inkSoft),
-            ),
-          if (_problem != null) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Brand.kraftLight,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.location_off, color: Brand.kraft),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _problem!,
-                      style: const TextStyle(fontSize: 15, color: Brand.ink),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-            ),
-            onPressed: _locating ? null : _locate,
-            icon: _locating
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  )
-                : Icon(me == null ? Icons.my_location : Icons.refresh),
-            label: Text(
-              _locating
-                  ? 'Finding you…'
-                  : me == null
-                  ? 'Get My Current Location'
-                  : 'Update Location',
-            ),
-          ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _openGuide,
-            icon: const Icon(Icons.navigation),
-            label: const Text('Guide Me to My Pickups'),
-          ),
-        ],
       ),
     );
   }
